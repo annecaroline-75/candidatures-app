@@ -751,7 +751,9 @@ function genererPdf(markdown, nomFichier) {
   return new Promise((resolve, reject) => {
     const conteneur = document.createElement("div");
     conteneur.style.cssText =
-      "padding:40px;font-family:Georgia,serif;font-size:12pt;line-height:1.6;color:#111;width:190mm;";
+      "position:fixed;top:0;left:-99999px;z-index:-1;" +
+      "background:#ffffff;padding:40px;box-sizing:border-box;" +
+      "font-family:Georgia,serif;font-size:12pt;line-height:1.6;color:#111;width:190mm;";
     conteneur.innerHTML = marked.parse(markdown);
     document.body.appendChild(conteneur);
 
@@ -760,7 +762,15 @@ function genererPdf(markdown, nomFichier) {
         margin: 0,
         filename: nomFichier,
         image: { type: "jpeg", quality: 0.96 },
-        html2canvas: { scale: 2, useCORS: true },
+        html2canvas: {
+          scale: 2,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          scrollX: 0,
+          scrollY: 0,
+          windowWidth: conteneur.scrollWidth,
+          windowHeight: conteneur.scrollHeight
+        },
         jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
       })
       .from(conteneur)
