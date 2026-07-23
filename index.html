@@ -1,0 +1,1064 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Suivi des candidatures</title>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/turndown@7.2.0/dist/turndown.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 16px;
+    background: #f1f5f9;
+    font-family: system-ui, -apple-system, sans-serif;
+    color: #0f172a;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+
+  h1 { font-size: 25px; margin: 0 0 2px; letter-spacing: -0.5px; }
+  .sub { color: #64748b; margin: 0 0 20px; font-size: 14px; }
+
+  .carte {
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 14px; padding: 20px; margin-bottom: 16px;
+  }
+  .carte.reglages { background: #f8fafc; border-color: #cbd5e1; }
+  .carte h2 { font-size: 17px; margin: 0 0 4px; }
+  .aide { font-size: 13px; color: #64748b; margin: 0 0 16px; }
+
+  label { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 5px; }
+  input, select, textarea {
+    width: 100%; padding: 10px 13px;
+    border: 1px solid #cbd5e1; border-radius: 8px;
+    font-size: 15px; font-family: inherit;
+    background: #fff; margin-bottom: 13px;
+  }
+  input.mono { font-family: monospace; font-size: 14px; }
+  textarea {
+    min-height: 260px; resize: vertical;
+    font-family: ui-monospace, monospace; font-size: 14px; line-height: 1.6;
+  }
+  .grille { display: grid; grid-template-columns: repeat(auto-fit, minmax(215px, 1fr)); gap: 0 13px; }
+
+  button { font-family: inherit; cursor: pointer; border: none; border-radius: 8px; }
+  .principal {
+    width: 100%; background: #2563eb; color: #fff;
+    font-weight: 700; font-size: 16px; padding: 14px;
+  }
+  .principal:disabled { background: #94a3b8; cursor: not-allowed; }
+  .secondaire { width: 100%; background: #0f172a; color: #fff; font-weight: 600; font-size: 15px; padding: 12px; }
+  .lien { background: none; color: #2563eb; font-size: 14px; padding: 6px 0; text-decoration: underline; }
+
+  /* Onglets documents */
+  .onglets { display: flex; gap: 6px; margin-bottom: 14px; flex-wrap: wrap; }
+  .onglet {
+    padding: 8px 15px; background: #f1f5f9; color: #475569;
+    font-size: 14px; font-weight: 600; border-radius: 8px;
+  }
+  .onglet.actif { background: #2563eb; color: #fff; }
+
+  /* Barre outils markdown */
+  .outils { display: flex; gap: 5px; margin-bottom: 8px; flex-wrap: wrap; }
+  .outils button {
+    padding: 6px 11px; background: #e2e8f0; color: #334155;
+    font-size: 13px; font-weight: 600; border-radius: 6px;
+  }
+  .outils button:hover { background: #cbd5e1; }
+
+  .apercu {
+    border: 1px solid #e2e8f0; border-radius: 8px;
+    padding: 20px; background: #fff; min-height: 260px;
+    margin-bottom: 13px; font-size: 14px;
+  }
+  .apercu h1 { font-size: 21px; margin: 0 0 8px; }
+  .apercu h2 { font-size: 17px; margin: 16px 0 6px; }
+  .apercu h3 { font-size: 15px; margin: 13px 0 5px; }
+  .apercu ul, .apercu ol { padding-left: 20px; margin: 6px 0; }
+  .apercu p { margin: 6px 0; }
+  .apercu hr { border: none; border-top: 1px solid #e2e8f0; margin: 14px 0; }
+
+  .coche { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; font-size: 14px; }
+  .coche input { width: auto; margin: 0; }
+
+  /* Zone d'import */
+  .import {
+    border: 2px dashed #cbd5e1; border-radius: 10px;
+    padding: 16px; margin-bottom: 14px; background: #f8fafc;
+  }
+  .import p { margin: 0 0 10px; font-size: 13px; color: #64748b; }
+  .import input[type=file] {
+    margin: 0; padding: 9px; font-size: 13px;
+    border-style: dashed; background: #fff;
+  }
+  .alerte {
+    background: #fef3c7; color: #78350f;
+    padding: 11px 14px; border-radius: 8px;
+    font-size: 13px; margin-bottom: 13px;
+  }
+  .rang-fichier {
+    display: flex; align-items: center; gap: 10px;
+    background: #fff; border: 1px solid #e2e8f0;
+    border-radius: 8px; padding: 10px 12px; margin-bottom: 8px;
+  }
+  .rang-fichier .nom {
+    flex: 1; font-size: 13px; color: #334155;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .rang-fichier select {
+    width: auto; margin: 0; padding: 7px 10px; font-size: 13px;
+  }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(102px, 1fr)); gap: 9px; margin-bottom: 16px; }
+  .stat { border-radius: 10px; padding: 12px; }
+  .stat .l { font-size: 12px; font-weight: 600; opacity: .85; }
+  .stat .v { font-size: 24px; font-weight: 700; }
+
+  .msg { padding: 12px 15px; border-radius: 8px; font-weight: 500; font-size: 14px; margin-bottom: 14px; }
+  .ok { background: #dcfce7; color: #166534; }
+  .ko { background: #fee2e2; color: #991b1b; }
+  .info { background: #dbeafe; color: #1e40af; }
+  .debug {
+    background: #1e293b; color: #e2e8f0; font-family: monospace;
+    font-size: 12px; padding: 13px; border-radius: 8px;
+    margin-bottom: 14px; word-break: break-all;
+  }
+
+  .ligne { border: 1px solid #e2e8f0; border-radius: 10px; padding: 14px; margin-bottom: 11px; }
+  .titre-ligne { font-weight: 700; font-size: 15px; }
+  .badge {
+    display: inline-block; padding: 2px 9px; border-radius: 999px;
+    font-size: 12px; font-weight: 600; margin-left: 7px;
+  }
+  .attente { background: #fef3c7; color: #78350f; }
+  .repondue { background: #dcfce7; color: #166534; }
+  .aboutie { background: #e0f2fe; color: #075985; }
+  .pj { background: #e0e7ff; color: #3730a3; margin-left: 0; margin-top: 5px; }
+  .meta { font-size: 14px; color: #475569; }
+  .date { font-size: 12px; color: #64748b; margin-bottom: 10px; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; }
+  .actions button { padding: 7px 12px; font-size: 13px; font-weight: 500; }
+  .b-bleu { background: #dbeafe; color: #1e40af; }
+  .b-violet { background: #f3e8ff; color: #6b21a8; }
+  .b-rouge { background: #fee2e2; color: #991b1b; }
+  .vide { color: #94a3b8; text-align: center; padding: 26px 0; font-size: 14px; }
+  .cache { display: none; }
+
+  .apercu-hist {
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px dashed #cbd5e1;
+  }
+  .apercu-hist-bloc { margin-bottom: 14px; }
+  .apercu-hist-bloc:last-child { margin-bottom: 0; }
+  .apercu-hist-titre {
+    font-size: 12px; font-weight: 700; color: #64748b;
+    text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px;
+  }
+  .apercu-hist-mail {
+    background: #f8fafc; border-radius: 8px; padding: 12px;
+    font-size: 13px; white-space: pre-wrap; color: #334155;
+  }
+  .apercu-hist-doc {
+    background: #f8fafc; border-radius: 8px; padding: 12px;
+    font-size: 13px; color: #334155; max-height: 300px; overflow-y: auto;
+  }
+  .apercu-hist-doc h1 { font-size: 17px; margin: 0 0 6px; }
+  .apercu-hist-doc h2 { font-size: 15px; margin: 12px 0 4px; }
+  .apercu-hist-doc ul, .apercu-hist-doc ol { padding-left: 18px; margin: 4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <h1>Suivi des candidatures</h1>
+  <p class="sub">Documents, envoi avec pieces jointes, historique</p>
+
+  <div id="zone-msg"></div>
+  <div id="zone-debug"></div>
+
+  <!-- ================= REGLAGES ================= -->
+  <div class="carte reglages" id="carte-reglages">
+    <h2>Reglages</h2>
+    <p class="aide">
+      A remplir une seule fois. Utilise le copier-coller pour l'adresse du serveur.
+    </p>
+
+    <label for="r-nom">Ton nom complet</label>
+    <input type="text" id="r-nom" placeholder="LUY Anne-Caroline">
+
+    <label for="r-serveur">Adresse de ton serveur d'envoi</label>
+    <input type="text" id="r-serveur" class="mono" placeholder="https://mon-app.vercel.app/api/send">
+
+    <button class="secondaire" id="btn-reglages">Enregistrer les reglages</button>
+  </div>
+
+  <button class="lien cache" id="btn-ouvrir-reglages">Modifier mes reglages</button>
+
+  <!-- ================= DOCUMENTS ================= -->
+  <div class="carte">
+    <h2>Mes documents</h2>
+    <p class="aide">
+      Ecris ton CV et ta lettre ici. Ils sont convertis en PDF au moment de l'envoi.
+    </p>
+
+    <div class="onglets">
+      <button class="onglet actif" data-doc="cv">CV</button>
+      <button class="onglet" data-doc="lm">Lettre de motivation</button>
+    </div>
+
+    <div class="import">
+      <p>Importe tes documents existants. Tu peux en selectionner plusieurs d'un coup. Word et OpenDocument (.odt) donnent le meilleur resultat.</p>
+      <input type="file" id="fichier-import" accept=".docx,.odt,.pdf,.txt,.md" multiple>
+      <div id="affectation" class="cache"></div>
+    </div>
+
+    <div class="onglets">
+      <button class="onglet actif" data-vue="edition">Modifier</button>
+      <button class="onglet" data-vue="apercu">Apercu</button>
+    </div>
+
+    <div id="vue-edition">
+      <div class="outils">
+        <button data-md="titre">Titre</button>
+        <button data-md="soustitre">Sous-titre</button>
+        <button data-md="gras">Gras</button>
+        <button data-md="italique">Italique</button>
+        <button data-md="liste">Liste</button>
+        <button data-md="ligne">Separateur</button>
+      </div>
+      <textarea id="editeur" placeholder="Ecris ici..."></textarea>
+    </div>
+
+    <div id="vue-apercu" class="cache">
+      <div class="apercu" id="apercu"></div>
+    </div>
+
+    <button class="secondaire" id="btn-sauver-doc">Enregistrer ce document</button>
+  </div>
+
+  <!-- ================= CANDIDATURE ================= -->
+  <div class="carte">
+    <h2>Nouvelle candidature</h2>
+    <div class="grille">
+      <div>
+        <label for="entreprise">Entreprise</label>
+        <input type="text" id="entreprise" placeholder="Mission Locale de...">
+      </div>
+      <div>
+        <label for="poste">Poste</label>
+        <input type="text" id="poste" placeholder="Conseillere en insertion">
+      </div>
+      <div>
+        <label for="contrat">Type de contrat</label>
+        <select id="contrat">
+          <option>CDI temps plein</option>
+          <option>CDI temps partiel</option>
+          <option>CDD temps plein</option>
+          <option>CDD temps partiel</option>
+          <option>Stage</option>
+        </select>
+      </div>
+      <div>
+        <label for="email">Email du destinataire</label>
+        <input type="email" id="email" placeholder="rh@entreprise.fr">
+      </div>
+    </div>
+
+    <label>Pieces jointes</label>
+    <div class="coche">
+      <input type="checkbox" id="joindre-cv" checked>
+      <label for="joindre-cv" style="margin:0;font-weight:500">Joindre mon CV en PDF</label>
+    </div>
+    <div class="coche">
+      <input type="checkbox" id="joindre-lm" checked>
+      <label for="joindre-lm" style="margin:0;font-weight:500">Joindre ma lettre de motivation en PDF</label>
+    </div>
+
+    <button class="principal" id="btn-envoyer">Envoyer ma candidature</button>
+  </div>
+
+  <!-- ================= STATS + HISTORIQUE ================= -->
+  <div class="stats" id="stats"></div>
+
+  <div class="carte">
+    <h2>Mes candidatures</h2>
+    <div id="liste"></div>
+  </div>
+
+</div>
+
+<script>
+// =======================================================
+//  ETAT
+// =======================================================
+let config = { nom: "", serveur: "" };
+let documents = { cv: "", lm: "" };
+let candidatures = [];
+
+let docActif = "cv";
+let vueActive = "edition";
+
+// =======================================================
+//  STOCKAGE
+// =======================================================
+function lire(cle, defaut) {
+  try {
+    const brut = localStorage.getItem(cle);
+    return brut ? JSON.parse(brut) : defaut;
+  } catch (e) { return defaut; }
+}
+function ecrire(cle, valeur) {
+  localStorage.setItem(cle, JSON.stringify(valeur));
+}
+
+// =======================================================
+//  MESSAGES
+// =======================================================
+function afficherMsg(texte, type) {
+  document.getElementById("zone-msg").innerHTML =
+    texte ? '<div class="msg ' + type + '">' + texte + '</div>' : '';
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+function afficherDebug(texte) {
+  document.getElementById("zone-debug").innerHTML =
+    texte ? '<div class="debug"><strong>Detail technique :</strong><br>' + texte + '</div>' : '';
+}
+
+// =======================================================
+//  REGLAGES
+// =======================================================
+function chargerConfig() {
+  config = lire("config", { nom: "", serveur: "" });
+  document.getElementById("r-nom").value = config.nom || "";
+  document.getElementById("r-serveur").value = config.serveur || "";
+  if (config.nom && config.serveur) replierReglages();
+}
+function replierReglages() {
+  document.getElementById("carte-reglages").classList.add("cache");
+  document.getElementById("btn-ouvrir-reglages").classList.remove("cache");
+}
+function deplierReglages() {
+  document.getElementById("carte-reglages").classList.remove("cache");
+  document.getElementById("btn-ouvrir-reglages").classList.add("cache");
+}
+function enregistrerConfig() {
+  config = {
+    nom: document.getElementById("r-nom").value.trim(),
+    serveur: document.getElementById("r-serveur").value.trim()
+  };
+  if (!config.nom || !config.serveur) {
+    afficherMsg("Renseigne ton nom et l'adresse du serveur.", "info");
+    return;
+  }
+  ecrire("config", config);
+  replierReglages();
+  afficherMsg("Reglages enregistres.", "ok");
+}
+
+// =======================================================
+//  EDITEUR DE DOCUMENTS
+// =======================================================
+function chargerDocuments() {
+  documents = lire("documents", { cv: "", lm: "" });
+  afficherDoc();
+}
+
+function afficherDoc() {
+  document.getElementById("editeur").value = documents[docActif] || "";
+  majApercu();
+}
+
+function majApercu() {
+  const texte = document.getElementById("editeur").value;
+  document.getElementById("apercu").innerHTML = marked.parse(texte || "*Rien a afficher pour le moment.*");
+}
+
+function sauverDoc() {
+  documents[docActif] = document.getElementById("editeur").value;
+  ecrire("documents", documents);
+  afficherMsg(docActif === "cv" ? "CV enregistre." : "Lettre de motivation enregistree.", "ok");
+}
+
+function insererMarkdown(type) {
+  const zone = document.getElementById("editeur");
+  const debut = zone.selectionStart;
+  const fin = zone.selectionEnd;
+  const selection = zone.value.substring(debut, fin);
+  const modeles = {
+    titre:     ["# ", selection || "Titre", ""],
+    soustitre: ["## ", selection || "Sous-titre", ""],
+    gras:      ["**", selection || "texte", "**"],
+    italique:  ["*", selection || "texte", "*"],
+    liste:     ["- ", selection || "element", ""],
+    ligne:     ["\n---\n", "", ""]
+  };
+  const m = modeles[type];
+  const insere = m[0] + m[1] + m[2];
+  zone.value = zone.value.substring(0, debut) + insere + zone.value.substring(fin);
+  zone.focus();
+  zone.selectionStart = debut + m[0].length;
+  zone.selectionEnd = debut + m[0].length + m[1].length;
+}
+
+// =======================================================
+//  IMPORT DE FICHIERS
+// =======================================================
+if (window.pdfjsLib) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc =
+    "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+}
+
+function lireFichier(fichier, mode) {
+  return new Promise(function (resolve, reject) {
+    const lecteur = new FileReader();
+    lecteur.onload = function () { resolve(lecteur.result); };
+    lecteur.onerror = function () { reject(new Error("Lecture impossible")); };
+    if (mode === "buffer") lecteur.readAsArrayBuffer(fichier);
+    else lecteur.readAsText(fichier);
+  });
+}
+
+async function importerWord(fichier) {
+  const buffer = await lireFichier(fichier, "buffer");
+  const resultat = await mammoth.convertToHtml({ arrayBuffer: buffer });
+  const convertisseur = new TurndownService({
+    headingStyle: "atx",
+    bulletListMarker: "-"
+  });
+  return convertisseur.turndown(resultat.value);
+}
+
+async function importerOdt(fichier) {
+  const buffer = await lireFichier(fichier, "buffer");
+  const archive = await JSZip.loadAsync(buffer);
+
+  const fichierContenu = archive.file("content.xml");
+  if (!fichierContenu) throw new Error("Fichier ODT invalide : content.xml introuvable");
+  const contenuXml = await fichierContenu.async("string");
+
+  let stylesXml = "";
+  const fichierStyles = archive.file("styles.xml");
+  if (fichierStyles) stylesXml = await fichierStyles.async("string");
+
+  const analyseur = new DOMParser();
+  const doc = analyseur.parseFromString(contenuXml, "application/xml");
+  const docStyles = stylesXml ? analyseur.parseFromString(stylesXml, "application/xml") : null;
+
+  // Repere les styles en gras (definis soit dans content.xml, soit dans styles.xml)
+  const stylesGras = {};
+  function indexerStyles(racine) {
+    if (!racine) return;
+    const elements = racine.getElementsByTagName("style:style");
+    for (let i = 0; i < elements.length; i++) {
+      const style = elements[i];
+      const nom = style.getAttribute("style:name");
+      const proprietes = style.getElementsByTagName("style:text-properties")[0];
+      if (nom && proprietes) {
+        const poids = proprietes.getAttribute("fo:font-weight");
+        if (poids && poids.toLowerCase() === "bold") stylesGras[nom] = true;
+      }
+    }
+  }
+  indexerStyles(doc);
+  indexerStyles(docStyles);
+
+  function texteParagraphe(p) {
+    let resultat = "";
+    let totalCar = 0;
+    let carGras = 0;
+
+    function parcourir(noeud) {
+      if (noeud.nodeType === 3) { resultat += noeud.nodeValue; return; }
+      if (noeud.nodeType !== 1) return;
+      const balise = noeud.tagName;
+
+      if (balise === "text:tab") { resultat += "\t"; return; }
+      if (balise === "text:s") {
+        const n = parseInt(noeud.getAttribute("text:c") || "1", 10);
+        resultat += " ".repeat(n);
+        return;
+      }
+      if (balise === "text:span") {
+        const nomStyle = noeud.getAttribute("text:style-name");
+        const estGras = !!(nomStyle && stylesGras[nomStyle]);
+        const avant = resultat.length;
+        for (let i = 0; i < noeud.childNodes.length; i++) parcourir(noeud.childNodes[i]);
+        const ajoute = resultat.length - avant;
+        totalCar += ajoute;
+        if (estGras) carGras += ajoute;
+        return;
+      }
+      for (let i = 0; i < noeud.childNodes.length; i++) parcourir(noeud.childNodes[i]);
+    }
+
+    for (let i = 0; i < p.childNodes.length; i++) parcourir(p.childNodes[i]);
+    const texte = resultat.replace(/[ \t]+/g, " ").trim();
+    return { texte: texte, gras: totalCar > 0 && (carGras / totalCar) > 0.5 };
+  }
+
+  function estDansListe(element) {
+    let parent = element.parentNode;
+    while (parent) {
+      if (parent.tagName === "text:list-item") return true;
+      if (parent.tagName === "office:text" || parent.tagName === "office:body") return false;
+      parent = parent.parentNode;
+    }
+    return false;
+  }
+
+  const corps = doc.getElementsByTagName("office:text")[0] || doc;
+  const paragraphes = [];
+  (function collecter(noeud) {
+    for (let i = 0; i < noeud.childNodes.length; i++) {
+      const enfant = noeud.childNodes[i];
+      if (enfant.nodeType !== 1) continue;
+      if (enfant.tagName === "text:p" || enfant.tagName === "text:h") {
+        paragraphes.push(enfant);
+      } else {
+        collecter(enfant);
+      }
+    }
+  })(corps);
+
+  let texte = "";
+  paragraphes.forEach(function (p) {
+    const resultatLigne = texteParagraphe(p);
+    if (!resultatLigne.texte) { texte += "\n"; return; }
+
+    let ligne = resultatLigne.texte;
+    if (p.tagName === "text:h") {
+      const niveau = parseInt(p.getAttribute("text:outline-level") || "1", 10);
+      ligne = "#".repeat(Math.min(Math.max(niveau, 1), 3)) + " " + ligne;
+    } else if (estDansListe(p)) {
+      ligne = "- " + ligne;
+    } else if (resultatLigne.gras) {
+      ligne = "**" + ligne + "**";
+    }
+    texte += ligne + "\n";
+  });
+
+  return texte.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+async function importerPdf(fichier) {
+  const buffer = await lireFichier(fichier, "buffer");
+  const document_ = await pdfjsLib.getDocument({ data: buffer }).promise;
+  const lignes = [];
+
+  for (let n = 1; n <= document_.numPages; n++) {
+    const page = await document_.getPage(n);
+    const contenu = await page.getTextContent();
+
+    let mots = [];
+    let dernierY = null;
+
+    contenu.items.forEach(function (item) {
+      const y = item.transform[5];
+      const taille = Math.abs(item.transform[3]) || 10;
+      const gras = /bold|black|heavy|semibold/i.test(item.fontName || "");
+
+      if (dernierY !== null && Math.abs(y - dernierY) > 3) {
+        lignes.push(mots);
+        mots = [];
+      }
+      if (item.str.trim() !== "") {
+        mots.push({ texte: item.str, taille: taille, gras: gras });
+      }
+      dernierY = y;
+    });
+    if (mots.length) lignes.push(mots);
+    lignes.push(null); // marque de saut de page
+  }
+
+  // Taille de corps de texte la plus frequente (sert de reference)
+  const compteur = {};
+  lignes.forEach(function (mots) {
+    if (!mots) return;
+    mots.forEach(function (m) {
+      const t = Math.round(m.taille);
+      compteur[t] = (compteur[t] || 0) + m.texte.length;
+    });
+  });
+  let tailleStandard = 10;
+  let maxOccurrences = 0;
+  Object.keys(compteur).forEach(function (t) {
+    if (compteur[t] > maxOccurrences) { maxOccurrences = compteur[t]; tailleStandard = Number(t); }
+  });
+
+  let texte = "";
+  lignes.forEach(function (mots) {
+    if (!mots) { texte += "\n"; return; }
+
+    const brut = mots.map(function (m) { return m.texte; }).join(" ")
+      .replace(/\s+/g, " ").trim();
+    if (!brut) return;
+
+    const tailleLigne = Math.max.apply(null, mots.map(function (m) { return m.taille; }));
+    const majoriteGras = mots.filter(function (m) { return m.gras; }).length > mots.length / 2;
+    const estPuce = /^[•‣◦∙·-]\s+/.test(brut);
+
+    let ligneFinale = estPuce ? "- " + brut.replace(/^[•‣◦∙·-]\s+/, "") : brut;
+
+    if (tailleLigne >= tailleStandard * 1.4) {
+      ligneFinale = "# " + ligneFinale;
+    } else if (tailleLigne >= tailleStandard * 1.15) {
+      ligneFinale = "## " + ligneFinale;
+    } else if (majoriteGras && !estPuce) {
+      ligneFinale = "**" + ligneFinale + "**";
+    }
+
+    texte += ligneFinale + "\n";
+  });
+
+  return texte.replace(/\n{3,}/g, "\n\n").trim();
+}
+
+let fichiersEnAttente = [];
+
+function devinerCible(nomFichier) {
+  const n = nomFichier.toLowerCase();
+  if (n.indexOf("lettre") !== -1 || n.indexOf("motivation") !== -1 ||
+      n.indexOf("lm") !== -1 || n.indexOf("lettre_") !== -1) {
+    return "lm";
+  }
+  if (n.indexOf("cv") !== -1 || n.indexOf("curriculum") !== -1 ||
+      n.indexOf("resume") !== -1) {
+    return "cv";
+  }
+  return "";
+}
+
+function proposerAffectation(evenement) {
+  fichiersEnAttente = Array.prototype.slice.call(evenement.target.files);
+  const zone = document.getElementById("affectation");
+
+  if (fichiersEnAttente.length === 0) {
+    zone.classList.add("cache");
+    return;
+  }
+
+  let html = '<p style="margin:14px 0 9px;font-size:13px;color:#334155;font-weight:600">' +
+             'Indique ou placer chaque fichier :</p>';
+
+  fichiersEnAttente.forEach(function (f, i) {
+    const devine = devinerCible(f.name);
+    html += '<div class="rang-fichier">' +
+      '<span class="nom">' + f.name + '</span>' +
+      '<select data-index="' + i + '">' +
+        '<option value="cv"' + (devine === "cv" ? " selected" : "") + '>CV</option>' +
+        '<option value="lm"' + (devine === "lm" ? " selected" : "") + '>Lettre</option>' +
+        '<option value=""' + (devine === "" ? " selected" : "") + '>Ignorer</option>' +
+      '</select></div>';
+  });
+
+  html += '<button class="secondaire" id="btn-valider-import" style="margin-top:6px">' +
+          'Importer ces documents</button>';
+
+  zone.innerHTML = html;
+  zone.classList.remove("cache");
+
+  document.getElementById("btn-valider-import")
+    .addEventListener("click", lancerImport);
+}
+
+async function extraireContenu(fichier) {
+  const nom = fichier.name.toLowerCase();
+
+  if (nom.endsWith(".docx")) {
+    return { texte: await importerWord(fichier), brut: false };
+  }
+  if (nom.endsWith(".odt")) {
+    return { texte: await importerOdt(fichier), brut: false };
+  }
+  if (nom.endsWith(".pdf")) {
+    return { texte: await importerPdf(fichier), brut: true };
+  }
+  if (nom.endsWith(".txt") || nom.endsWith(".md")) {
+    return { texte: await lireFichier(fichier, "texte"), brut: false };
+  }
+  throw new Error("Format non gere : " + fichier.name);
+}
+
+async function lancerImport() {
+  const selects = document.querySelectorAll("#affectation select");
+  const affectations = {};
+
+  selects.forEach(function (s) {
+    const cible = s.value;
+    if (cible) affectations[s.dataset.index] = cible;
+  });
+
+  const indices = Object.keys(affectations);
+  if (indices.length === 0) {
+    afficherMsg("Aucun fichier selectionne. Choisis CV ou Lettre pour au moins un fichier.", "info");
+    return;
+  }
+
+  afficherMsg("Lecture des fichiers en cours...", "info");
+
+  const importes = [];
+  let pdfPresent = false;
+
+  try {
+    for (const i of indices) {
+      const fichier = fichiersEnAttente[i];
+      const cible = affectations[i];
+      const resultat = await extraireContenu(fichier);
+
+      if (!resultat.texte.trim()) {
+        afficherMsg("Aucun texte trouve dans " + fichier.name +
+                    ". S'il s'agit d'un document scanne, le texte n'est pas recuperable.", "ko");
+        return;
+      }
+
+      documents[cible] = resultat.texte;
+      if (resultat.brut) pdfPresent = true;
+      importes.push(cible === "cv" ? "CV" : "lettre de motivation");
+    }
+
+    ecrire("documents", documents);
+    afficherDoc();
+
+    const zone = document.getElementById("affectation");
+    zone.classList.add("cache");
+    zone.innerHTML = "";
+    document.getElementById("fichier-import").value = "";
+    fichiersEnAttente = [];
+
+    let message = "Import termine : " + importes.join(" et ") + ".";
+    if (pdfPresent) {
+      message += " Les titres et le gras d'un PDF sont devines automatiquement : verifie qu'ils sont corrects dans Apercu avant d'enregistrer.";
+      afficherMsg(message, "info");
+    } else {
+      message += " Verifie le rendu dans Apercu, puis enregistre.";
+      afficherMsg(message, "ok");
+    }
+  } catch (err) {
+    afficherMsg("Import impossible.", "ko");
+    afficherDebug(String(err));
+  }
+}
+
+// =======================================================
+//  GENERATION PDF
+// =======================================================
+function genererPdf(markdown, nomFichier) {
+  return new Promise((resolve, reject) => {
+    const conteneur = document.createElement("div");
+    conteneur.style.cssText =
+      "padding:40px;font-family:Georgia,serif;font-size:12pt;line-height:1.6;color:#111;width:190mm;";
+    conteneur.innerHTML = marked.parse(markdown);
+    document.body.appendChild(conteneur);
+
+    html2pdf()
+      .set({
+        margin: 0,
+        filename: nomFichier,
+        image: { type: "jpeg", quality: 0.96 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
+      })
+      .from(conteneur)
+      .outputPdf("datauristring")
+      .then(function (uri) {
+        document.body.removeChild(conteneur);
+        resolve(uri.split("base64,")[1]);
+      })
+      .catch(function (err) {
+        document.body.removeChild(conteneur);
+        reject(err);
+      });
+  });
+}
+
+// =======================================================
+//  AFFICHAGE STATS + LISTE
+// =======================================================
+function majStats() {
+  const blocs = [
+    { l: "Total",              v: candidatures.length, bg: "#eff6ff", fg: "#1e3a8a" },
+    { l: "Entretien",          v: candidatures.filter(c => c.statut === "Entretien").length, bg: "#dcfce7", fg: "#166534" },
+    { l: "Reponse entretien",  v: candidatures.filter(c => c.statut === "Reponse entretien").length, bg: "#e0f2fe", fg: "#075985" },
+    { l: "Relances",           v: candidatures.filter(c => c.relance).length, bg: "#f3e8ff", fg: "#6b21a8" }
+  ];
+  document.getElementById("stats").innerHTML = blocs.map(b =>
+    '<div class="stat" style="background:' + b.bg + ';color:' + b.fg + '">' +
+      '<div class="l">' + b.l + '</div><div class="v">' + b.v + '</div></div>'
+  ).join("");
+}
+
+function echapper(texte) {
+  const d = document.createElement("div");
+  d.textContent = texte || "";
+  return d.innerHTML;
+}
+
+function majListe() {
+  const zone = document.getElementById("liste");
+  if (candidatures.length === 0) {
+    zone.innerHTML = '<p class="vide">Rien pour l\'instant. Envoie ta premiere candidature ci-dessus.</p>';
+    return;
+  }
+  zone.innerHTML = candidatures.map(c => {
+    const classesParStatut = { "En attente": "attente", "Entretien": "repondue", "Reponse entretien": "aboutie" };
+    const libellesBouton = {
+      "En attente": "Marquer entretien obtenu",
+      "Entretien": "Marquer reponse recue",
+      "Reponse entretien": "Remettre en attente"
+    };
+    const cls = classesParStatut[c.statut] || "attente";
+    const lib = libellesBouton[c.statut] || "Marquer entretien obtenu";
+    const btnRel = c.relance ? '' :
+      '<button class="b-violet" onclick="relancer(' + c.id + ')">Noter une relance</button>';
+    const infoRel = c.relance ? " — relancee le " + c.dateRelance : "";
+    const pj = (c.pieces && c.pieces.length)
+      ? '<div><span class="badge pj">' + c.pieces.join(" + ") + ' joints</span></div>'
+      : '';
+
+    const aUnApercu = !!c.snapshotMail;
+    const libApercu = c.apercuOuvert ? "Masquer l'apercu" : "Voir ce qui a ete envoye";
+    const btnApercu = aUnApercu
+      ? '<button class="b-bleu" onclick="toggleApercu(' + c.id + ')">' + libApercu + '</button>'
+      : '';
+
+    let panneauApercu = "";
+    if (aUnApercu && c.apercuOuvert) {
+      let blocs = '<div class="apercu-hist-bloc">' +
+        '<div class="apercu-hist-titre">Texte du mail</div>' +
+        '<div class="apercu-hist-mail">' + echapper(c.snapshotMail) + '</div></div>';
+
+      if (c.snapshotCv) {
+        blocs += '<div class="apercu-hist-bloc">' +
+          '<div class="apercu-hist-titre">CV joint</div>' +
+          '<div class="apercu-hist-doc">' + marked.parse(c.snapshotCv) + '</div></div>';
+      }
+      if (c.snapshotLm) {
+        blocs += '<div class="apercu-hist-bloc">' +
+          '<div class="apercu-hist-titre">Lettre de motivation jointe</div>' +
+          '<div class="apercu-hist-doc">' + marked.parse(c.snapshotLm) + '</div></div>';
+      }
+      panneauApercu = '<div class="apercu-hist">' + blocs + '</div>';
+    }
+
+    return '<div class="ligne">' +
+      '<div><span class="titre-ligne">' + c.poste + ' — ' + c.contrat + '</span>' +
+      '<span class="badge ' + cls + '">' + c.statut + '</span></div>' +
+      '<div class="meta">' + c.entreprise + ' — ' + c.email + '</div>' +
+      pj +
+      '<div class="date">Envoyee le ' + c.dateEnvoi + infoRel + '</div>' +
+      '<div class="actions">' +
+        '<button class="b-bleu" onclick="basculerStatut(' + c.id + ')">' + lib + '</button>' +
+        btnRel +
+        btnApercu +
+        '<button class="b-rouge" onclick="supprimer(' + c.id + ')">Supprimer</button>' +
+      '</div>' +
+      panneauApercu +
+      '</div>';
+  }).join("");
+}
+
+function toggleApercu(id) {
+  candidatures = candidatures.map(c =>
+    c.id === id ? Object.assign({}, c, { apercuOuvert: !c.apercuOuvert }) : c
+  );
+  majListe();
+}
+
+
+function rafraichir() { majStats(); majListe(); }
+
+function basculerStatut(id) {
+  const suivant = { "En attente": "Entretien", "Entretien": "Reponse entretien", "Reponse entretien": "En attente" };
+  candidatures = candidatures.map(c => c.id === id
+    ? Object.assign({}, c, { statut: suivant[c.statut] || "Entretien" })
+    : c);
+  ecrire("candidatures", candidatures); rafraichir();
+}
+function relancer(id) {
+  candidatures = candidatures.map(c => c.id === id
+    ? Object.assign({}, c, { relance: true, dateRelance: new Date().toLocaleDateString("fr-FR") })
+    : c);
+  ecrire("candidatures", candidatures); rafraichir();
+}
+function supprimer(id) {
+  candidatures = candidatures.filter(c => c.id !== id);
+  ecrire("candidatures", candidatures); rafraichir();
+}
+
+// =======================================================
+//  ENVOI
+// =======================================================
+function texteEmail(poste, contrat) {
+  return "Madame, Monsieur,\n\n" +
+    "Veuillez trouver ci-joint ma candidature au poste de " + poste + " - " + contrat +
+    " au sein de votre entreprise.\n\n" +
+    "Dans l'attente de votre retour, je vous prie d'agreer, Madame, Monsieur, mes sinceres salutations.\n\n" +
+    "Cordialement,\n" + config.nom;
+}
+
+async function envoyer() {
+  afficherDebug("");
+
+  if (!config.nom || !config.serveur) {
+    afficherMsg("Renseigne d'abord tes reglages.", "info");
+    deplierReglages();
+    return;
+  }
+
+  const entreprise = document.getElementById("entreprise").value.trim();
+  const poste      = document.getElementById("poste").value.trim();
+  const contrat    = document.getElementById("contrat").value;
+  const email      = document.getElementById("email").value.trim();
+
+  if (!entreprise || !poste || !email) {
+    afficherMsg("Remplis les trois champs obligatoires.", "info");
+    return;
+  }
+
+  const avecCv = document.getElementById("joindre-cv").checked;
+  const avecLm = document.getElementById("joindre-lm").checked;
+
+  if (avecCv && !documents.cv.trim()) {
+    afficherMsg("Ton CV est vide. Ecris-le dans Mes documents ou decoche la case.", "info");
+    return;
+  }
+  if (avecLm && !documents.lm.trim()) {
+    afficherMsg("Ta lettre est vide. Ecris-la dans Mes documents ou decoche la case.", "info");
+    return;
+  }
+
+  const bouton = document.getElementById("btn-envoyer");
+  bouton.disabled = true;
+
+  try {
+    const pieces = [];
+    const nomsPieces = [];
+
+    if (avecCv) {
+      bouton.textContent = "Creation du PDF du CV...";
+      afficherMsg("Creation du PDF du CV...", "info");
+      const base64 = await genererPdf(documents.cv, "CV.pdf");
+      pieces.push({ filename: "CV - " + config.nom + ".pdf", content: base64 });
+      nomsPieces.push("CV");
+    }
+
+    if (avecLm) {
+      bouton.textContent = "Creation du PDF de la lettre...";
+      afficherMsg("Creation du PDF de la lettre...", "info");
+      const base64 = await genererPdf(documents.lm, "LM.pdf");
+      pieces.push({ filename: "Lettre de motivation - " + config.nom + ".pdf", content: base64 });
+      nomsPieces.push("LM");
+    }
+
+    bouton.textContent = "Envoi en cours...";
+    afficherMsg("Envoi en cours...", "info");
+
+    const reponse = await fetch(config.serveur, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: email,
+        fromName: config.nom,
+        subject: "Candidature - " + poste,
+        text: texteEmail(poste, contrat),
+        attachments: pieces
+      })
+    });
+
+    const donnees = await reponse.json().catch(() => ({}));
+
+    if (!reponse.ok) {
+      afficherMsg("Echec de l'envoi.", "ko");
+      afficherDebug("Code " + reponse.status + " — " + (donnees.error || JSON.stringify(donnees)));
+      return;
+    }
+
+    candidatures.unshift({
+      id: Date.now(),
+      entreprise: entreprise,
+      poste: poste,
+      contrat: contrat,
+      email: email,
+      dateEnvoi: new Date().toLocaleDateString("fr-FR"),
+      statut: "En attente",
+      relance: false,
+      dateRelance: null,
+      pieces: nomsPieces,
+      apercuOuvert: false,
+      snapshotMail: texteEmail(poste, contrat),
+      snapshotCv: avecCv ? documents.cv : "",
+      snapshotLm: avecLm ? documents.lm : ""
+    });
+    ecrire("candidatures", candidatures);
+    rafraichir();
+
+    document.getElementById("entreprise").value = "";
+    document.getElementById("poste").value = "";
+    document.getElementById("email").value = "";
+
+    afficherMsg("Candidature envoyee a " + entreprise + " et enregistree.", "ok");
+  } catch (err) {
+    afficherMsg("Echec de l'envoi.", "ko");
+    afficherDebug(String(err));
+  } finally {
+    bouton.disabled = false;
+    bouton.textContent = "Envoyer ma candidature";
+  }
+}
+
+// =======================================================
+//  BRANCHEMENTS
+// =======================================================
+document.getElementById("btn-reglages").addEventListener("click", enregistrerConfig);
+document.getElementById("btn-ouvrir-reglages").addEventListener("click", deplierReglages);
+document.getElementById("btn-sauver-doc").addEventListener("click", sauverDoc);
+document.getElementById("btn-envoyer").addEventListener("click", envoyer);
+document.getElementById("editeur").addEventListener("input", majApercu);
+
+document.getElementById("fichier-import").addEventListener("change", proposerAffectation);
+
+document.querySelectorAll("[data-doc]").forEach(b => {
+  b.addEventListener("click", function () {
+    documents[docActif] = document.getElementById("editeur").value;
+    docActif = this.dataset.doc;
+    document.querySelectorAll("[data-doc]").forEach(x => x.classList.remove("actif"));
+    this.classList.add("actif");
+    afficherDoc();
+  });
+});
+
+document.querySelectorAll("[data-vue]").forEach(b => {
+  b.addEventListener("click", function () {
+    vueActive = this.dataset.vue;
+    document.querySelectorAll("[data-vue]").forEach(x => x.classList.remove("actif"));
+    this.classList.add("actif");
+    if (vueActive === "apercu") {
+      majApercu();
+      document.getElementById("vue-edition").classList.add("cache");
+      document.getElementById("vue-apercu").classList.remove("cache");
+    } else {
+      document.getElementById("vue-edition").classList.remove("cache");
+      document.getElementById("vue-apercu").classList.add("cache");
+    }
+  });
+});
+
+document.querySelectorAll("[data-md]").forEach(b => {
+  b.addEventListener("click", function () { insererMarkdown(this.dataset.md); });
+});
+
+// =======================================================
+//  DEMARRAGE
+// =======================================================
+chargerConfig();
+chargerDocuments();
+candidatures = lire("candidatures", []);
+rafraichir();
+</script>
+</body>
+</html>
