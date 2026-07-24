@@ -117,6 +117,18 @@
   .etiquette-fichier {
     font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 5px;
   }
+  .bascule { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 4px; }
+  .bascule button {
+    flex: 1; min-width: 130px; padding: 11px 14px;
+    background: #f1f5f9; color: #475569;
+    font-size: 14px; font-weight: 600; border-radius: 8px;
+  }
+  .bascule button.actif { background: #2563eb; color: #fff; }
+  .bascule button:disabled { opacity: .45; cursor: not-allowed; }
+  .etat-sauvegarde {
+    font-size: 12px; color: #16a34a; align-self: center;
+    margin-left: auto; font-weight: 600;
+  }
   .rang-origine {
     display: flex; align-items: center; gap: 10px;
     background: #f8fafc; border: 1px solid #e2e8f0;
@@ -221,7 +233,8 @@
   <div class="carte">
     <h2>Mes documents</h2>
     <p class="aide">
-      Ecris ton CV et ta lettre ici. Ils sont convertis en PDF au moment de l'envoi.
+      Deux versions coexistent : ton fichier d'origine, et une version modifiable ici.
+      Tu choisis laquelle envoyer au moment de la candidature.
     </p>
 
     <div class="onglets">
@@ -229,24 +242,17 @@
       <button class="onglet" data-doc="lm">Lettre de motivation</button>
     </div>
 
-    <div class="import">
-      <p>Importe tes documents existants. Tu peux en selectionner plusieurs d'un coup. Le fichier original est conserve tel quel, et son texte est repris dans l'editeur ci-dessous.</p>
-      <input type="file" id="fichier-import" accept=".docx,.odt,.pdf,.txt,.md" multiple>
-      <div id="affectation" class="cache"></div>
-    </div>
+    <div class="etiquette-fichier">Version originale</div>
+    <div class="rang-origine" id="fichier-actif"></div>
+    <input type="file" id="fichier-import" accept=".docx,.odt,.pdf,.txt,.md" multiple class="cache">
+    <div id="affectation" class="cache"></div>
 
-    <div class="bloc-fichier">
-      <div class="etiquette-fichier">Fichier original du CV</div>
-      <div class="rang-origine" id="fichier-cv"></div>
-    </div>
-    <div class="bloc-fichier">
-      <div class="etiquette-fichier">Fichier original de la lettre</div>
-      <div class="rang-origine" id="fichier-lm"></div>
-    </div>
+    <div class="etiquette-fichier" style="margin-top:18px">Version modifiable</div>
 
     <div class="onglets">
       <button class="onglet actif" data-vue="edition">Modifier</button>
       <button class="onglet" data-vue="apercu">Apercu</button>
+      <span class="etat-sauvegarde" id="etat-sauvegarde"></span>
     </div>
 
     <div id="vue-edition">
@@ -265,10 +271,7 @@
       <div class="apercu" id="apercu"></div>
     </div>
 
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="secondaire" id="btn-sauver-doc" style="flex:1">Enregistrer ce document</button>
-      <button class="lien" id="btn-modele" style="flex:none;text-decoration:none;background:#f1f5f9;color:#334155;padding:12px 16px;font-weight:600;font-size:15px">Utiliser un modele</button>
-    </div>
+    <button class="lien cache" id="btn-modele">Partir d'un modele vierge</button>
   </div>
 
   <!-- ================= CANDIDATURE ================= -->
@@ -299,11 +302,11 @@
       </div>
     </div>
 
-    <label for="choix-cv">CV a joindre</label>
-    <select id="choix-cv"></select>
+    <label>Quel CV envoyer</label>
+    <div class="bascule" id="bascule-cv"></div>
 
-    <label for="choix-lm">Lettre de motivation a joindre</label>
-    <select id="choix-lm"></select>
+    <label style="margin-top:14px">Quelle lettre envoyer</label>
+    <div class="bascule" id="bascule-lm"></div>
 
     <button class="principal" id="btn-envoyer">Envoyer ma candidature</button>
   </div>
@@ -351,22 +354,29 @@ function poidsLisible(base64) {
   return Math.round(octets / 1024) + " Ko";
 }
 
+let choixEnvoi = { cv: "original", lm: "original" };
+
 function majAffichageFichiers() {
-  ["cv", "lm"].forEach(function (cle) {
-    const zone = document.getElementById("fichier-" + cle);
-    if (!zone) return;
-    const f = fichiersOrigine[cle];
-    if (f) {
-      zone.innerHTML =
-        '<span class="nom-fichier">' + f.nom + ' <span class="poids">(' + poidsLisible(f.base64) + ')</span></span>' +
-        '<button class="b-rouge" onclick="retirerFichierOrigine(\'' + cle + '\')">Retirer</button>';
-      zone.classList.remove("cache");
-    } else {
-      zone.innerHTML = '<span class="nom-fichier vide-fichier">Aucun fichier original conserve</span>';
-      zone.classList.remove("cache");
-    }
-  });
+  const zone = document.getElementById("fichier-actif");
+  if (!zone) return;
+  const f = fichiersOrigine[docActif];
+
+  if (f) {
+    zone.innerHTML =
+      '<span class="nom-fichier">' + f.nom +
+      ' <span class="poids">(' + poidsLisible(f.base64) + ')</span></span>' +
+      '<button class="b-bleu" onclick="declencherImport()">Remplacer</button>' +
+      '<button class="b-rouge" onclick="retirerFichierOrigine(\'' + docActif + '\')">Retirer</button>';
+  } else {
+    zone.innerHTML =
+      '<span class="nom-fichier vide-fichier">Aucun fichier importe</span>' +
+      '<button class="b-bleu" onclick="declencherImport()">Importer</button>';
+  }
   majOptionsEnvoi();
+}
+
+function declencherImport() {
+  document.getElementById("fichier-import").click();
 }
 
 function retirerFichierOrigine(cle) {
@@ -378,28 +388,40 @@ function retirerFichierOrigine(cle) {
 
 function majOptionsEnvoi() {
   ["cv", "lm"].forEach(function (cle) {
-    const select = document.getElementById("choix-" + cle);
-    if (!select) return;
-    const valeurActuelle = select.value;
-    const f = fichiersOrigine[cle];
-    const texteDoc = documents[cle] && documents[cle].trim();
+    const zone = document.getElementById("bascule-" + cle);
+    if (!zone) return;
 
-    let html = '<option value="rien">Ne pas joindre</option>';
-    if (f) html += '<option value="original">Fichier original : ' + f.nom + '</option>';
-    if (texteDoc) html += '<option value="editeur">Version editeur (PDF genere)</option>';
+    const aOriginal = !!fichiersOrigine[cle];
+    const aTexte = !!(documents[cle] && documents[cle].trim());
 
-    select.innerHTML = html;
+    // Bascule automatiquement si le choix actuel n'est plus disponible
+    if (choixEnvoi[cle] === "original" && !aOriginal) choixEnvoi[cle] = aTexte ? "editeur" : "original";
+    if (choixEnvoi[cle] === "editeur" && !aTexte) choixEnvoi[cle] = aOriginal ? "original" : "editeur";
 
-    if (valeurActuelle && select.querySelector('option[value="' + valeurActuelle + '"]')) {
-      select.value = valeurActuelle;
-    } else if (f) {
-      select.value = "original";
-    } else if (texteDoc) {
-      select.value = "editeur";
-    } else {
-      select.value = "rien";
+    const nomOriginal = aOriginal ? fichiersOrigine[cle].nom : "aucun fichier importe";
+
+    zone.innerHTML =
+      '<button class="' + (choixEnvoi[cle] === "original" ? "actif" : "") + '"' +
+        (aOriginal ? "" : " disabled") +
+        ' onclick="definirChoix(\'' + cle + '\',\'original\')">' +
+        'Version originale</button>' +
+      '<button class="' + (choixEnvoi[cle] === "editeur" ? "actif" : "") + '"' +
+        (aTexte ? "" : " disabled") +
+        ' onclick="definirChoix(\'' + cle + '\',\'editeur\')">' +
+        'Version modifiee ici</button>';
+
+    const info = document.getElementById("info-" + cle);
+    if (info) {
+      info.textContent = choixEnvoi[cle] === "original"
+        ? "Sera envoye : " + nomOriginal
+        : "Sera envoye : un PDF genere depuis l'editeur";
     }
   });
+}
+
+function definirChoix(cle, valeur) {
+  choixEnvoi[cle] = valeur;
+  majOptionsEnvoi();
 }
 
 const MODELE_CV =
@@ -439,21 +461,14 @@ const MODELE_LM =
 "[Prenom NOM]";
 
 function insererModele() {
-  const contenuActuel = document.getElementById("editeur").value.trim();
-  if (contenuActuel) {
-    const confirme = window.confirm(
-      "Cela va remplacer le texte actuel de " +
-      (docActif === "cv" ? "ton CV" : "ta lettre") +
-      " par un modele vierge. Continuer ?"
-    );
-    if (!confirme) return;
-  }
-
   const modele = docActif === "cv" ? MODELE_CV : MODELE_LM;
   document.getElementById("editeur").value = modele;
   documents[docActif] = modele;
+  ecrire("documents", documents);
   majApercu();
-  afficherMsg("Modele insere. Remplace les crochets [ ] par tes informations, puis enregistre.", "info");
+  majOptionsEnvoi();
+  majBoutonModele();
+  afficherMsg("Modele insere. Remplace les crochets [ ] par tes informations.", "info");
 }
 let candidatures = [];
 
@@ -535,11 +550,35 @@ function majApercu() {
   document.getElementById("apercu").innerHTML = marked.parse(texte || "*Rien a afficher pour le moment.*");
 }
 
+let minuteurSauvegarde = null;
+
 function sauverDoc() {
   documents[docActif] = document.getElementById("editeur").value;
   ecrire("documents", documents);
   majOptionsEnvoi();
-  afficherMsg(docActif === "cv" ? "CV enregistre." : "Lettre de motivation enregistree.", "ok");
+  majBoutonModele();
+
+  const etat = document.getElementById("etat-sauvegarde");
+  if (etat) {
+    etat.textContent = "Enregistre";
+    clearTimeout(minuteurSauvegarde);
+    minuteurSauvegarde = setTimeout(function () { etat.textContent = ""; }, 2000);
+  }
+}
+
+let minuteurFrappe = null;
+function sauvegardeAuto() {
+  clearTimeout(minuteurFrappe);
+  const etat = document.getElementById("etat-sauvegarde");
+  if (etat) etat.textContent = "...";
+  minuteurFrappe = setTimeout(sauverDoc, 700);
+}
+
+function majBoutonModele() {
+  const bouton = document.getElementById("btn-modele");
+  if (!bouton) return;
+  const vide = !document.getElementById("editeur").value.trim();
+  bouton.classList.toggle("cache", !vide);
 }
 
 function insererMarkdown(type) {
@@ -1174,8 +1213,8 @@ async function envoyer() {
     return;
   }
 
-  const choixCv = document.getElementById("choix-cv").value;
-  const choixLm = document.getElementById("choix-lm").value;
+  const choixCv = choixEnvoi.cv;
+  const choixLm = choixEnvoi.lm;
 
   if (choixCv === "editeur" && !documents.cv.trim()) {
     afficherMsg("Ton CV est vide dans l'editeur. Ecris-le ou choisis une autre option.", "info");
@@ -1284,20 +1323,25 @@ async function envoyer() {
 // =======================================================
 document.getElementById("btn-reglages").addEventListener("click", enregistrerConfig);
 document.getElementById("btn-ouvrir-reglages").addEventListener("click", deplierReglages);
-document.getElementById("btn-sauver-doc").addEventListener("click", sauverDoc);
 document.getElementById("btn-modele").addEventListener("click", insererModele);
 document.getElementById("btn-envoyer").addEventListener("click", envoyer);
-document.getElementById("editeur").addEventListener("input", majApercu);
+document.getElementById("editeur").addEventListener("input", function () {
+  majApercu();
+  sauvegardeAuto();
+});
 
 document.getElementById("fichier-import").addEventListener("change", proposerAffectation);
 
 document.querySelectorAll("[data-doc]").forEach(b => {
   b.addEventListener("click", function () {
     documents[docActif] = document.getElementById("editeur").value;
+    ecrire("documents", documents);
     docActif = this.dataset.doc;
     document.querySelectorAll("[data-doc]").forEach(x => x.classList.remove("actif"));
     this.classList.add("actif");
     afficherDoc();
+    majAffichageFichiers();
+    majBoutonModele();
   });
 });
 
@@ -1327,6 +1371,7 @@ document.querySelectorAll("[data-md]").forEach(b => {
 chargerConfig();
 chargerDocuments();
 chargerFichiersOrigine();
+majBoutonModele();
 candidatures = lire("candidatures", []);
 rafraichir();
 </script>
