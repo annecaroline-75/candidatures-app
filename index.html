@@ -723,22 +723,36 @@ function proposerAffectation(evenement) {
     .addEventListener("click", lancerImport);
 }
 
+function nettoyerSymbolesPuces(texte) {
+  return texte
+    .split("\n")
+    .map(function (ligne) {
+      // Une puce venant d'une police a symboles (Wingdings...) devient un vrai tiret
+      const nettoyee = ligne.replace(/^[\uE000-\uF8FF]\s*/, "- ");
+      // Elimine les caracteres de meme origine restant ailleurs dans la ligne
+      return nettoyee.replace(/[\uE000-\uF8FF]/g, "");
+    })
+    .join("\n");
+}
+
 async function extraireContenu(fichier) {
   const nom = fichier.name.toLowerCase();
+  let resultat;
 
   if (nom.endsWith(".docx")) {
-    return { texte: await importerWord(fichier), brut: false };
+    resultat = { texte: await importerWord(fichier), brut: false };
+  } else if (nom.endsWith(".odt")) {
+    resultat = { texte: await importerOdt(fichier), brut: false };
+  } else if (nom.endsWith(".pdf")) {
+    resultat = { texte: await importerPdf(fichier), brut: true };
+  } else if (nom.endsWith(".txt") || nom.endsWith(".md")) {
+    resultat = { texte: await lireFichier(fichier, "texte"), brut: false };
+  } else {
+    throw new Error("Format non gere : " + fichier.name);
   }
-  if (nom.endsWith(".odt")) {
-    return { texte: await importerOdt(fichier), brut: false };
-  }
-  if (nom.endsWith(".pdf")) {
-    return { texte: await importerPdf(fichier), brut: true };
-  }
-  if (nom.endsWith(".txt") || nom.endsWith(".md")) {
-    return { texte: await lireFichier(fichier, "texte"), brut: false };
-  }
-  throw new Error("Format non gere : " + fichier.name);
+
+  resultat.texte = nettoyerSymbolesPuces(resultat.texte);
+  return resultat;
 }
 
 async function lancerImport() {
@@ -813,6 +827,7 @@ function nettoyerGras(texte) {
 function genererPdf(markdown, nomFichier) {
   return new Promise((resolve, reject) => {
     try {
+      const markdownPropre = nettoyerSymbolesPuces(markdown);
       const jsPDF = window.jspdf.jsPDF;
       const doc = new jsPDF({ unit: "mm", format: "a4" });
 
@@ -848,7 +863,7 @@ function genererPdf(markdown, nomFichier) {
         });
       }
 
-      const lignesSource = markdown.split("\n");
+      const lignesSource = markdownPropre.split("\n");
       let premierTitre = true;
 
       lignesSource.forEach(function (ligneBrute) {
