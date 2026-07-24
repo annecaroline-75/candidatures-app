@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Suivi des candidatures</title>
 <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mammoth@1.8.0/mammoth.browser.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/turndown@7.2.0/dist/turndown.js"></script>
@@ -747,42 +747,92 @@ async function lancerImport() {
 // =======================================================
 //  GENERATION PDF
 // =======================================================
+function nettoyerGras(texte) {
+  const gras = /^\*\*.*\*\*$/.test(texte.trim());
+  const nettoye = texte.replace(/\*\*/g, "");
+  return { texte: nettoye, gras: gras };
+}
+
 function genererPdf(markdown, nomFichier) {
   return new Promise((resolve, reject) => {
-    const conteneur = document.createElement("div");
-    conteneur.style.cssText =
-      "position:fixed;top:0;left:-99999px;z-index:-1;" +
-      "background:#ffffff;padding:40px;box-sizing:border-box;" +
-      "font-family:Georgia,serif;font-size:12pt;line-height:1.6;color:#111;width:190mm;";
-    conteneur.innerHTML = marked.parse(markdown);
-    document.body.appendChild(conteneur);
+    try {
+      const jsPDF = window.jspdf.jsPDF;
+      const doc = new jsPDF({ unit: "mm", format: "a4" });
 
-    html2pdf()
-      .set({
-        margin: 0,
-        filename: nomFichier,
-        image: { type: "jpeg", quality: 0.96 },
-        html2canvas: {
-          scale: 2,
-          useCORS: true,
-          backgroundColor: "#ffffff",
-          scrollX: 0,
-          scrollY: 0,
-          windowWidth: conteneur.scrollWidth,
-          windowHeight: conteneur.scrollHeight
-        },
-        jsPDF: { unit: "mm", format: "a4", orientation: "portrait" }
-      })
-      .from(conteneur)
-      .outputPdf("datauristring")
-      .then(function (uri) {
-        document.body.removeChild(conteneur);
-        resolve(uri.split("base64,")[1]);
-      })
-      .catch(function (err) {
-        document.body.removeChild(conteneur);
-        reject(err);
+      const margeGauche = 20;
+      const margeDroite = 20;
+      const margeHaut = 20;
+      const margeBas = 20;
+      const largeurPage = 210;
+      const hauteurPage = 297;
+      const largeurTexte = largeurPage - margeGauche - margeDroite;
+
+      let y = margeHaut;
+
+      function nouvellePageSiNecessaire(hauteurNecessaire) {
+        if (y + hauteurNecessaire > hauteurPage - margeBas) {
+          doc.addPage();
+          y = margeHaut;
+        }
+      }
+
+      function ecrireLigne(texte, taille, gras, decalageGauche, interligne, avant) {
+        y += avant || 0;
+        doc.setFont("helvetica", gras ? "bold" : "normal");
+        doc.setFontSize(taille);
+        const largeurDisponible = largeurTexte - (decalageGauche || 0);
+        const lignes = doc.splitTextToSize(texte, largeurDisponible);
+        lignes.forEach(function (ligne) {
+          nouvellePageSiNecessaire(interligne);
+          doc.text(ligne, margeGauche + (decalageGauche || 0), y);
+          y += interligne;
+        });
+      }
+
+      const lignesSource = markdown.split("\n");
+
+      lignesSource.forEach(function (ligneBrute) {
+        const ligne = ligneBrute.trim();
+
+        if (ligne === "") { y += 3; return; }
+
+        if (/^---+$/.test(ligne)) {
+          nouvellePageSiNecessaire(6);
+          y += 3;
+          doc.setDrawColor(180);
+          doc.line(margeGauche, y, largeurPage - margeDroite, y);
+          y += 4;
+          return;
+        }
+
+        if (ligne.startsWith("### ")) {
+          ecrireLigne(nettoyerGras(ligne.slice(4)).texte, 12, true, 0, 5.5, 3);
+          return;
+        }
+        if (ligne.startsWith("## ")) {
+          ecrireLigne(nettoyerGras(ligne.slice(3)).texte, 14, true, 0, 6.5, 4);
+          return;
+        }
+        if (ligne.startsWith("# ")) {
+          ecrireLigne(nettoyerGras(ligne.slice(2)).texte, 18, true, 0, 8, 5);
+          return;
+        }
+        if (/^[-*]\s+/.test(ligne)) {
+          const contenu = ligne.replace(/^[-*]\s+/, "");
+          const info = nettoyerGras(contenu);
+          ecrireLigne("-  " + info.texte, 11, info.gras, 4, 5.5, 1);
+          return;
+        }
+
+        const info = nettoyerGras(ligne);
+        ecrireLigne(info.texte, 11, info.gras, 0, 5.5, 1.5);
       });
+
+      const uri = doc.output("datauristring");
+      resolve(uri.split("base64,")[1]);
+    } catch (err) {
+      reject(err);
+    }
   });
 }
 
