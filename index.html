@@ -238,7 +238,10 @@
       <div class="apercu" id="apercu"></div>
     </div>
 
-    <button class="secondaire" id="btn-sauver-doc">Enregistrer ce document</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="secondaire" id="btn-sauver-doc" style="flex:1">Enregistrer ce document</button>
+      <button class="lien" id="btn-modele" style="flex:none;text-decoration:none;background:#f1f5f9;color:#334155;padding:12px 16px;font-weight:600;font-size:15px">Utiliser un modele</button>
+    </div>
   </div>
 
   <!-- ================= CANDIDATURE ================= -->
@@ -298,6 +301,60 @@
 // =======================================================
 let config = { nom: "", serveur: "" };
 let documents = { cv: "", lm: "" };
+
+const MODELE_CV =
+"# [Prenom NOM]\n" +
+"[Intitule du poste recherche]\n\n" +
+"**Coordonnees :** [email] . [telephone] . [ville]\n\n" +
+"---\n\n" +
+"## Profil\n" +
+"[2 a 3 lignes resumant votre profil, vos competences cles et votre objectif professionnel.]\n\n" +
+"## Experience professionnelle\n\n" +
+"### [Intitule du poste] - [Nom de l'entreprise]\n" +
+"[Mois annee] - [Mois annee]\n" +
+"- [Realisation ou mission principale]\n" +
+"- [Realisation ou mission principale]\n\n" +
+"### [Intitule du poste] - [Nom de l'entreprise]\n" +
+"[Mois annee] - [Mois annee]\n" +
+"- [Realisation ou mission principale]\n\n" +
+"## Formation\n\n" +
+"### [Diplome] - [Etablissement]\n" +
+"[Annee]\n\n" +
+"## Competences\n" +
+"- [Competence 1]\n" +
+"- [Competence 2]\n" +
+"- [Competence 3]\n\n" +
+"## Langues\n" +
+"- [Langue] : [niveau]";
+
+const MODELE_LM =
+"# [Prenom NOM]\n" +
+"[email] . [telephone]\n\n" +
+"Madame, Monsieur,\n\n" +
+"[Phrase d'accroche expliquant votre interet pour le poste et l'entreprise.]\n\n" +
+"[Paragraphe presentant votre parcours et vos competences en lien avec le poste.]\n\n" +
+"[Paragraphe expliquant ce que vous pouvez apporter a l'entreprise.]\n\n" +
+"Je reste a votre disposition pour un entretien et vous prie d'agreer, Madame, Monsieur, l'expression de mes salutations distinguees.\n\n" +
+"Cordialement,\n" +
+"[Prenom NOM]";
+
+function insererModele() {
+  const contenuActuel = document.getElementById("editeur").value.trim();
+  if (contenuActuel) {
+    const confirme = window.confirm(
+      "Cela va remplacer le texte actuel de " +
+      (docActif === "cv" ? "ton CV" : "ta lettre") +
+      " par un modele vierge. Continuer ?"
+    );
+    if (!confirme) return;
+  }
+
+  const modele = docActif === "cv" ? MODELE_CV : MODELE_LM;
+  document.getElementById("editeur").value = modele;
+  documents[docActif] = modele;
+  majApercu();
+  afficherMsg("Modele insere. Remplace les crochets [ ] par tes informations, puis enregistre.", "info");
+}
 let candidatures = [];
 
 let docActif = "cv";
@@ -776,10 +833,12 @@ function genererPdf(markdown, nomFichier) {
         }
       }
 
-      function ecrireLigne(texte, taille, gras, decalageGauche, interligne, avant) {
+      function ecrireLigne(texte, taille, gras, decalageGauche, interligne, avant, couleur) {
         y += avant || 0;
         doc.setFont("helvetica", gras ? "bold" : "normal");
         doc.setFontSize(taille);
+        if (couleur) { doc.setTextColor(couleur[0], couleur[1], couleur[2]); }
+        else { doc.setTextColor(20, 20, 20); }
         const largeurDisponible = largeurTexte - (decalageGauche || 0);
         const lignes = doc.splitTextToSize(texte, largeurDisponible);
         lignes.forEach(function (ligne) {
@@ -790,6 +849,7 @@ function genererPdf(markdown, nomFichier) {
       }
 
       const lignesSource = markdown.split("\n");
+      let premierTitre = true;
 
       lignesSource.forEach(function (ligneBrute) {
         const ligne = ligneBrute.trim();
@@ -799,22 +859,34 @@ function genererPdf(markdown, nomFichier) {
         if (/^---+$/.test(ligne)) {
           nouvellePageSiNecessaire(6);
           y += 3;
-          doc.setDrawColor(180);
+          doc.setDrawColor(200);
           doc.line(margeGauche, y, largeurPage - margeDroite, y);
           y += 4;
           return;
         }
 
         if (ligne.startsWith("### ")) {
-          ecrireLigne(nettoyerGras(ligne.slice(4)).texte, 12, true, 0, 5.5, 3);
+          ecrireLigne(nettoyerGras(ligne.slice(4)).texte, 12, true, 0, 5.5, 3, [71, 85, 105]);
           return;
         }
         if (ligne.startsWith("## ")) {
-          ecrireLigne(nettoyerGras(ligne.slice(3)).texte, 14, true, 0, 6.5, 4);
+          ecrireLigne(nettoyerGras(ligne.slice(3)).texte, 14, true, 0, 6.5, 5, [37, 99, 235]);
+          nouvellePageSiNecessaire(2);
+          doc.setDrawColor(219, 234, 254);
+          doc.line(margeGauche, y - 4, margeGauche + 30, y - 4);
           return;
         }
         if (ligne.startsWith("# ")) {
-          ecrireLigne(nettoyerGras(ligne.slice(2)).texte, 18, true, 0, 8, 5);
+          ecrireLigne(nettoyerGras(ligne.slice(2)).texte, 20, true, 0, 8, 5, [15, 23, 42]);
+          if (premierTitre) {
+            nouvellePageSiNecessaire(3);
+            doc.setDrawColor(37, 99, 235);
+            doc.setLineWidth(0.8);
+            doc.line(margeGauche, y - 3, margeGauche + 40, y - 3);
+            doc.setLineWidth(0.2);
+            y += 2;
+            premierTitre = false;
+          }
           return;
         }
         if (/^[-*]\s+/.test(ligne)) {
@@ -1077,6 +1149,7 @@ async function envoyer() {
 document.getElementById("btn-reglages").addEventListener("click", enregistrerConfig);
 document.getElementById("btn-ouvrir-reglages").addEventListener("click", deplierReglages);
 document.getElementById("btn-sauver-doc").addEventListener("click", sauverDoc);
+document.getElementById("btn-modele").addEventListener("click", insererModele);
 document.getElementById("btn-envoyer").addEventListener("click", envoyer);
 document.getElementById("editeur").addEventListener("input", majApercu);
 
