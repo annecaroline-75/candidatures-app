@@ -840,8 +840,51 @@ function nettoyerSymbolesPuces(texte) {
     .join("\n");
 }
 
-// Insere une ligne vide entre les paragraphes, sans desserrer
-// les blocs compacts comme une adresse ou des coordonnees.
+// Recolle les lignes coupees au milieu d'une phrase, frequentes
+// dans les documents ou les retours a la ligne sont manuels.
+function recollerLignes(texte) {
+  const lignes = texte.split("\n");
+  const sortie = [];
+
+  const mois = "janvier|fevrier|f\u00e9vrier|mars|avril|mai|juin|juillet|aout|ao\u00fbt|" +
+               "septembre|octobre|novembre|decembre|d\u00e9cembre";
+  const debutDeBloc = new RegExp("^(?:" + mois + "|(?:19|20)\\d{2}\\b)", "i");
+
+  function estTitre(l) { return /^#{1,6}\s/.test(l.trim()); }
+  function estPuce(l) { return /^[-*]\s/.test(l.trim()); }
+  function estSeparateur(l) { return /^---+$/.test(l.trim()); }
+
+  lignes.forEach(function (brute) {
+    const ligne = brute.trim();
+    if (!ligne) { sortie.push(""); return; }
+
+    const precedente = sortie.length ? sortie[sortie.length - 1] : null;
+
+    const suiteProbable =
+      precedente &&
+      precedente.trim() !== "" &&
+      precedente.trim().length >= 30 &&        // une ligne coupee est generalement longue
+      !estTitre(precedente) &&
+      !estSeparateur(precedente) &&
+      !estTitre(ligne) &&
+      !estPuce(ligne) &&
+      !estSeparateur(ligne) &&
+      !debutDeBloc.test(ligne) &&              // ni une nouvelle date
+      !/[.!?:]$/.test(precedente.trim()) &&    // la precedente ne se termine pas
+      precedente.indexOf("@") === -1 &&        // ni coordonnees
+      ligne.indexOf("@") === -1;
+
+    if (suiteProbable) {
+      sortie[sortie.length - 1] = precedente.replace(/\s+$/, "") + " " + ligne;
+    } else {
+      sortie.push(ligne);
+    }
+  });
+
+  return sortie.join("\n");
+}
+
+
 function aererParagraphes(texte) {
   const lignes = texte.split("\n");
   const sortie = [];
@@ -860,6 +903,14 @@ function aererParagraphes(texte) {
     const suivante = lignes[i + 1];
     if (suivante === undefined) continue;
     if (!ligne.trim() || !suivante.trim()) continue;
+
+    function estPuce(l) { return /^[-*]\s/.test(l.trim()); }
+
+    // Fin d'une liste suivie d'autre chose : on separe les blocs
+    if (estPuce(ligne) && !estPuce(suivante)) {
+      sortie.push("");
+      continue;
+    }
     if (estStructure(ligne) || estStructure(suivante)) continue;
 
     const finDePhrase = /[.!?]["»)\]]?$/.test(ligne.trim());
@@ -915,7 +966,13 @@ async function extraireContenu(fichier) {
     throw new Error("Format non gere : " + fichier.name);
   }
 
-  resultat.texte = italiserMetiers(aererParagraphes(nettoyerSymbolesPuces(resultat.texte)));
+  resultat.texte = italiserMetiers(
+    aererParagraphes(
+      recollerLignes(
+        nettoyerSymbolesPuces(resultat.texte)
+      )
+    )
+  );
   return resultat;
 }
 
