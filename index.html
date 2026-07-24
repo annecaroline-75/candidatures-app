@@ -830,6 +830,70 @@ async function importerPdf(fichier) {
   return texte.replace(/\n{3,}/g, "\n\n").trim();
 }
 
+function nettoyerSymbolesPuces(texte) {
+  return texte
+    .split("\n")
+    .map(function (ligne) {
+      const nettoyee = ligne.replace(/^[\uE000-\uF8FF]\s*/, "- ");
+      return nettoyee.replace(/[\uE000-\uF8FF]/g, "");
+    })
+    .join("\n");
+}
+
+// Insere une ligne vide entre les paragraphes, sans desserrer
+// les blocs compacts comme une adresse ou des coordonnees.
+function aererParagraphes(texte) {
+  const lignes = texte.split("\n");
+  const sortie = [];
+
+  function estStructure(l) {
+    return /^(#{1,6}\s|[-*]\s|---+$)/.test(l.trim());
+  }
+  function estFormuleAppel(l) {
+    return /^(madame|monsieur|messieurs|mesdames)\b/i.test(l.trim());
+  }
+
+  for (let i = 0; i < lignes.length; i++) {
+    const ligne = lignes[i];
+    sortie.push(ligne);
+
+    const suivante = lignes[i + 1];
+    if (suivante === undefined) continue;
+    if (!ligne.trim() || !suivante.trim()) continue;
+    if (estStructure(ligne) || estStructure(suivante)) continue;
+
+    const finDePhrase = /[.!?]["»)\]]?$/.test(ligne.trim());
+    const appelEnCours = estFormuleAppel(ligne);
+    const appelSuivant = estFormuleAppel(suivante);
+
+    if (finDePhrase || appelEnCours || appelSuivant) {
+      sortie.push("");
+    }
+  }
+
+  return sortie.join("\n").replace(/\n{3,}/g, "\n\n");
+}
+
+async function extraireContenu(fichier) {
+  const nom = fichier.name.toLowerCase();
+  let resultat;
+
+  if (nom.endsWith(".docx")) {
+    resultat = { texte: await importerWord(fichier), brut: false };
+  } else if (nom.endsWith(".odt")) {
+    resultat = { texte: await importerOdt(fichier), brut: false };
+  } else if (nom.endsWith(".pdf")) {
+    resultat = { texte: await importerPdf(fichier), brut: true };
+  } else if (nom.endsWith(".txt") || nom.endsWith(".md")) {
+    resultat = { texte: await lireFichier(fichier, "texte"), brut: false };
+  } else {
+    throw new Error("Format non gere : " + fichier.name);
+  }
+
+  resultat.texte = aererParagraphes(nettoyerSymbolesPuces(resultat.texte));
+  return resultat;
+}
+
 function declencherImportOriginal() {
   document.getElementById("import-original").click();
 }
