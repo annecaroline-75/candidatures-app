@@ -80,7 +80,7 @@
   .apercu h2 { font-size: 17px; margin: 16px 0 6px; }
   .apercu h3 { font-size: 15px; margin: 13px 0 5px; }
   .apercu ul, .apercu ol { padding-left: 20px; margin: 6px 0; }
-  .apercu p { margin: 6px 0; }
+  .apercu p { margin: 0 0 11px; line-height: 1.65; }
   .apercu hr { border: none; border-top: 1px solid #e2e8f0; margin: 14px 0; }
 
   .coche { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; font-size: 14px; }
@@ -244,10 +244,14 @@
 
     <div class="etiquette-fichier">Version originale</div>
     <div class="rang-origine" id="fichier-actif"></div>
-    <input type="file" id="fichier-import" accept=".docx,.odt,.pdf,.txt,.md" multiple class="cache">
-    <div id="affectation" class="cache"></div>
+    <input type="file" id="import-original" accept=".docx,.odt,.pdf,.txt,.md" class="cache">
 
     <div class="etiquette-fichier" style="margin-top:18px">Version modifiable</div>
+    <div class="rang-origine" style="margin-bottom:10px">
+      <span class="nom-fichier vide-fichier" id="etat-editeur">Ecris directement, ou remplis depuis un fichier</span>
+      <button class="b-bleu" onclick="declencherImportEditeur()">Remplir depuis un fichier</button>
+    </div>
+    <input type="file" id="import-editeur" accept=".docx,.odt,.pdf,.txt,.md" class="cache">
 
     <div class="onglets">
       <button class="onglet actif" data-vue="edition">Modifier</button>
@@ -322,6 +326,10 @@
 </div>
 
 <script>
+// Les retours a la ligne simples sont respectes tels quels,
+// sans quoi les paragraphes d'une lettre se retrouvent colles.
+marked.setOptions({ breaks: true, gfm: true });
+
 // =======================================================
 //  ETAT
 // =======================================================
@@ -365,18 +373,14 @@ function majAffichageFichiers() {
     zone.innerHTML =
       '<span class="nom-fichier">' + f.nom +
       ' <span class="poids">(' + poidsLisible(f.base64) + ')</span></span>' +
-      '<button class="b-bleu" onclick="declencherImport()">Remplacer</button>' +
+      '<button class="b-bleu" onclick="declencherImportOriginal()">Remplacer</button>' +
       '<button class="b-rouge" onclick="retirerFichierOrigine(\'' + docActif + '\')">Retirer</button>';
   } else {
     zone.innerHTML =
       '<span class="nom-fichier vide-fichier">Aucun fichier importe</span>' +
-      '<button class="b-bleu" onclick="declencherImport()">Importer</button>';
+      '<button class="b-bleu" onclick="declencherImportOriginal()">Importer</button>';
   }
   majOptionsEnvoi();
-}
-
-function declencherImport() {
-  document.getElementById("fichier-import").click();
 }
 
 function retirerFichierOrigine(cle) {
@@ -576,9 +580,19 @@ function sauvegardeAuto() {
 
 function majBoutonModele() {
   const bouton = document.getElementById("btn-modele");
-  if (!bouton) return;
   const vide = !document.getElementById("editeur").value.trim();
-  bouton.classList.toggle("cache", !vide);
+  if (bouton) bouton.classList.toggle("cache", !vide);
+
+  const etat = document.getElementById("etat-editeur");
+  if (etat) {
+    if (vide) {
+      etat.textContent = "Ecris directement, ou remplis depuis un fichier";
+      etat.classList.add("vide-fichier");
+    } else {
+      etat.textContent = docActif === "cv" ? "CV redige dans l'app" : "Lettre redigee dans l'app";
+      etat.classList.remove("vide-fichier");
+    }
+  }
 }
 
 function insererMarkdown(type) {
@@ -816,145 +830,90 @@ async function importerPdf(fichier) {
   return texte.replace(/\n{3,}/g, "\n\n").trim();
 }
 
-let fichiersEnAttente = [];
-
-function devinerCible(nomFichier) {
-  const n = nomFichier.toLowerCase();
-  if (n.indexOf("lettre") !== -1 || n.indexOf("motivation") !== -1 ||
-      n.indexOf("lm") !== -1 || n.indexOf("lettre_") !== -1) {
-    return "lm";
-  }
-  if (n.indexOf("cv") !== -1 || n.indexOf("curriculum") !== -1 ||
-      n.indexOf("resume") !== -1) {
-    return "cv";
-  }
-  return "";
+function declencherImportOriginal() {
+  document.getElementById("import-original").click();
 }
 
-function proposerAffectation(evenement) {
-  fichiersEnAttente = Array.prototype.slice.call(evenement.target.files);
-  const zone = document.getElementById("affectation");
-
-  if (fichiersEnAttente.length === 0) {
-    zone.classList.add("cache");
-    return;
-  }
-
-  let html = '<p style="margin:14px 0 9px;font-size:13px;color:#334155;font-weight:600">' +
-             'Indique ou placer chaque fichier :</p>';
-
-  fichiersEnAttente.forEach(function (f, i) {
-    const devine = devinerCible(f.name);
-    html += '<div class="rang-fichier">' +
-      '<span class="nom">' + f.name + '</span>' +
-      '<select data-index="' + i + '">' +
-        '<option value="cv"' + (devine === "cv" ? " selected" : "") + '>CV</option>' +
-        '<option value="lm"' + (devine === "lm" ? " selected" : "") + '>Lettre</option>' +
-        '<option value=""' + (devine === "" ? " selected" : "") + '>Ignorer</option>' +
-      '</select></div>';
-  });
-
-  html += '<button class="secondaire" id="btn-valider-import" style="margin-top:6px">' +
-          'Importer ces documents</button>';
-
-  zone.innerHTML = html;
-  zone.classList.remove("cache");
-
-  document.getElementById("btn-valider-import")
-    .addEventListener("click", lancerImport);
+function declencherImportEditeur() {
+  document.getElementById("import-editeur").click();
 }
 
-function nettoyerSymbolesPuces(texte) {
-  return texte
-    .split("\n")
-    .map(function (ligne) {
-      // Une puce venant d'une police a symboles (Wingdings...) devient un vrai tiret
-      const nettoyee = ligne.replace(/^[\uE000-\uF8FF]\s*/, "- ");
-      // Elimine les caracteres de meme origine restant ailleurs dans la ligne
-      return nettoyee.replace(/[\uE000-\uF8FF]/g, "");
-    })
-    .join("\n");
-}
+// Import qui conserve le fichier tel quel ET remplit l'editeur
+async function traiterImportOriginal(evenement) {
+  const fichier = evenement.target.files[0];
+  evenement.target.value = "";
+  if (!fichier) return;
 
-async function extraireContenu(fichier) {
-  const nom = fichier.name.toLowerCase();
-  let resultat;
-
-  if (nom.endsWith(".docx")) {
-    resultat = { texte: await importerWord(fichier), brut: false };
-  } else if (nom.endsWith(".odt")) {
-    resultat = { texte: await importerOdt(fichier), brut: false };
-  } else if (nom.endsWith(".pdf")) {
-    resultat = { texte: await importerPdf(fichier), brut: true };
-  } else if (nom.endsWith(".txt") || nom.endsWith(".md")) {
-    resultat = { texte: await lireFichier(fichier, "texte"), brut: false };
-  } else {
-    throw new Error("Format non gere : " + fichier.name);
-  }
-
-  resultat.texte = nettoyerSymbolesPuces(resultat.texte);
-  return resultat;
-}
-
-async function lancerImport() {
-  const selects = document.querySelectorAll("#affectation select");
-  const affectations = {};
-
-  selects.forEach(function (s) {
-    const cible = s.value;
-    if (cible) affectations[s.dataset.index] = cible;
-  });
-
-  const indices = Object.keys(affectations);
-  if (indices.length === 0) {
-    afficherMsg("Aucun fichier selectionne. Choisis CV ou Lettre pour au moins un fichier.", "info");
-    return;
-  }
-
-  afficherMsg("Lecture des fichiers en cours...", "info");
-
-  const importes = [];
-  let pdfPresent = false;
+  const cible = docActif;
+  afficherMsg("Lecture du fichier en cours...", "info");
 
   try {
-    for (const i of indices) {
-      const fichier = fichiersEnAttente[i];
-      const cible = affectations[i];
-      const resultat = await extraireContenu(fichier);
+    const resultat = await extraireContenu(fichier);
+    const dataUrl = await lireFichier(fichier, "dataurl");
 
-      if (!resultat.texte.trim()) {
-        afficherMsg("Aucun texte trouve dans " + fichier.name +
-                    ". S'il s'agit d'un document scanne, le texte n'est pas recuperable.", "ko");
-        return;
-      }
+    fichiersOrigine[cible] = {
+      nom: fichier.name,
+      base64: dataUrl.split("base64,")[1]
+    };
+    if (!sauverFichiersOrigine()) return;
 
+    // Remplit aussi l'editeur si celui-ci est encore vide
+    if (resultat.texte.trim() && !documents[cible].trim()) {
       documents[cible] = resultat.texte;
-
-      // Conserve aussi le fichier original tel quel
-      const dataUrl = await lireFichier(fichier, "dataurl");
-      fichiersOrigine[cible] = {
-        nom: fichier.name,
-        base64: dataUrl.split("base64,")[1]
-      };
-
-      if (resultat.brut) pdfPresent = true;
-      importes.push(cible === "cv" ? "CV" : "lettre de motivation");
+      ecrire("documents", documents);
+      afficherDoc();
     }
 
-    ecrire("documents", documents);
-    sauverFichiersOrigine();
-    afficherDoc();
     majAffichageFichiers();
+    majBoutonModele();
+    afficherMsg("Fichier original enregistre : " + fichier.name, "ok");
+  } catch (err) {
+    afficherMsg("Import impossible.", "ko");
+    afficherDebug(String(err));
+  }
+}
 
-    const zone = document.getElementById("affectation");
-    zone.classList.add("cache");
-    zone.innerHTML = "";
-    document.getElementById("fichier-import").value = "";
-    fichiersEnAttente = [];
+// Import qui remplit uniquement la version modifiable
+async function traiterImportEditeur(evenement) {
+  const fichier = evenement.target.files[0];
+  evenement.target.value = "";
+  if (!fichier) return;
 
-    let message = "Import termine : " + importes.join(" et ") +
-      ". Le fichier original est conserve, et son texte est modifiable dans l'editeur.";
-    afficherMsg(message, "ok");
+  const cible = docActif;
+
+  if (documents[cible].trim()) {
+    const confirme = window.confirm(
+      "Cela va remplacer le texte actuellement dans l'editeur. Continuer ?"
+    );
+    if (!confirme) return;
+  }
+
+  afficherMsg("Lecture du fichier en cours...", "info");
+
+  try {
+    const resultat = await extraireContenu(fichier);
+
+    if (!resultat.texte.trim()) {
+      afficherMsg(
+        "Aucun texte trouve dans ce fichier. S'il s'agit d'un document scanne, le texte n'est pas recuperable.",
+        "ko"
+      );
+      return;
+    }
+
+    documents[cible] = resultat.texte;
+    ecrire("documents", documents);
+    afficherDoc();
+    majOptionsEnvoi();
+    majBoutonModele();
+
+    let message = "Texte importe dans la version modifiable.";
+    if (resultat.brut) {
+      message += " Depuis un PDF, les titres sont devines automatiquement : verifie le rendu dans Apercu.";
+      afficherMsg(message, "info");
+    } else {
+      afficherMsg(message, "ok");
+    }
   } catch (err) {
     afficherMsg("Import impossible.", "ko");
     afficherDebug(String(err));
@@ -1058,7 +1017,7 @@ function genererPdf(markdown, nomFichier) {
         }
 
         const info = nettoyerGras(ligne);
-        ecrireLigne(info.texte, 11, info.gras, 0, 5.5, 1.5);
+        ecrireLigne(info.texte, 11, info.gras, 0, 5.8, 2.2);
       });
 
       const uri = doc.output("datauristring");
@@ -1330,7 +1289,8 @@ document.getElementById("editeur").addEventListener("input", function () {
   sauvegardeAuto();
 });
 
-document.getElementById("fichier-import").addEventListener("change", proposerAffectation);
+document.getElementById("import-original").addEventListener("change", traiterImportOriginal);
+document.getElementById("import-editeur").addEventListener("change", traiterImportEditeur);
 
 document.querySelectorAll("[data-doc]").forEach(b => {
   b.addEventListener("click", function () {
