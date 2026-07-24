@@ -874,6 +874,31 @@ function aererParagraphes(texte) {
   return sortie.join("\n").replace(/\n{3,}/g, "\n\n");
 }
 
+// Met en italique l'intitule de poste dans les lignes du type
+// "Fevrier 2025 - Fevrier 2026 : Conseillere en insertion, Mission locale"
+function italiserMetiers(texte) {
+  const mois = "janvier|fevrier|f\u00e9vrier|mars|avril|mai|juin|juillet|aout|ao\u00fbt|" +
+               "septembre|octobre|novembre|decembre|d\u00e9cembre";
+  const motif = new RegExp(
+    "^([^:]*(?:" + mois + "|\\b(?:19|20)\\d{2})[^:]*)\\s*:\\s*([^,]+)(,?)(.*)$", "i"
+  );
+
+  return texte.split("\n").map(function (ligne) {
+    const t = ligne.trim();
+    if (!t) return ligne;
+    if (/^(#{1,6}\s|[-*]\s|---+$)/.test(t)) return ligne;
+    if (t.indexOf("*") !== -1) return ligne; // deja mis en forme
+
+    const trouve = t.match(motif);
+    if (!trouve) return ligne;
+
+    const metier = trouve[2].trim();
+    if (metier.length < 3 || metier.length > 90) return ligne;
+
+    return trouve[1].trim() + " : *" + metier + "*" + trouve[3] + trouve[4];
+  }).join("\n");
+}
+
 async function extraireContenu(fichier) {
   const nom = fichier.name.toLowerCase();
   let resultat;
@@ -890,7 +915,7 @@ async function extraireContenu(fichier) {
     throw new Error("Format non gere : " + fichier.name);
   }
 
-  resultat.texte = aererParagraphes(nettoyerSymbolesPuces(resultat.texte));
+  resultat.texte = italiserMetiers(aererParagraphes(nettoyerSymbolesPuces(resultat.texte)));
   return resultat;
 }
 
@@ -987,10 +1012,36 @@ async function traiterImportEditeur(evenement) {
 // =======================================================
 //  GENERATION PDF
 // =======================================================
-function nettoyerGras(texte) {
-  const gras = /^\*\*.*\*\*$/.test(texte.trim());
-  const nettoye = texte.replace(/\*\*/g, "");
-  return { texte: nettoye, gras: gras };
+// Decoupe une ligne en segments selon **gras** et *italique*
+function analyserSegments(ligne) {
+  const segments = [];
+  const motif = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
+  let position = 0;
+  let trouve;
+
+  while ((trouve = motif.exec(ligne)) !== null) {
+    if (trouve.index > position) {
+      segments.push({ texte: ligne.slice(position, trouve.index), gras: false, italique: false });
+    }
+    const jeton = trouve[0];
+    if (jeton.slice(0, 2) === "**") {
+      segments.push({ texte: jeton.slice(2, -2), gras: true, italique: false });
+    } else {
+      segments.push({ texte: jeton.slice(1, -1), gras: false, italique: true });
+    }
+    position = motif.lastIndex;
+  }
+  if (position < ligne.length) {
+    segments.push({ texte: ligne.slice(position), gras: false, italique: false });
+  }
+  return segments.length ? segments : [{ texte: ligne, gras: false, italique: false }];
+}
+
+function styleHelvetica(gras, italique) {
+  if (gras && italique) return "bolditalic";
+  if (gras) return "bold";
+  if (italique) return "italic";
+  return "normal";
 }
 
 function genererPdf(markdown, nomFichier) {
@@ -1017,19 +1068,56 @@ function genererPdf(markdown, nomFichier) {
         }
       }
 
-      function ecrireLigne(texte, taille, gras, decalageGauche, interligne, avant, couleur) {
+      function ecrireLigne(texteBrut, taille, grasImpose, decalageGauche, interligne, avant, couleur) {
         y += avant || 0;
-        doc.setFont("helvetica", gras ? "bold" : "normal");
         doc.setFontSize(taille);
         if (couleur) { doc.setTextColor(couleur[0], couleur[1], couleur[2]); }
         else { doc.setTextColor(20, 20, 20); }
-        const largeurDisponible = largeurTexte - (decalageGauche || 0);
-        const lignes = doc.splitTextToSize(texte, largeurDisponible);
-        lignes.forEach(function (ligne) {
-          nouvellePageSiNecessaire(interligne);
-          doc.text(ligne, margeGauche + (decalageGauche || 0), y);
-          y += interligne;
+
+        const depart = margeGauche + (decalageGauche || 0);
+        const largeurMax = largeurTexte - (decalageGauche || 0);
+
+        // Chaque mot conserve son propre style
+        const mots = [];
+        analyserSegments(texteBrut).forEach(function (segment) {
+          segment.texte.split(/(\s+)/).forEach(function (morceau) {
+            if (morceau === "") return;
+            mots.push({
+              texte: morceau,
+              gras: grasImpose || segment.gras,
+              italique: segment.italique
+            });
+          });
         });
+
+        let ligneEnCours = [];
+        let largeurEnCours = 0;
+
+        function poserLigne() {
+          if (!ligneEnCours.length) return;
+          nouvellePageSiNecessaire(interligne);
+          let x = depart;
+          ligneEnCours.forEach(function (mot) {
+            doc.setFont("helvetica", styleHelvetica(mot.gras, mot.italique));
+            doc.text(mot.texte, x, y);
+            x += doc.getTextWidth(mot.texte);
+          });
+          y += interligne;
+          ligneEnCours = [];
+          largeurEnCours = 0;
+        }
+
+        mots.forEach(function (mot) {
+          doc.setFont("helvetica", styleHelvetica(mot.gras, mot.italique));
+          const largeurMot = doc.getTextWidth(mot.texte);
+          if (largeurEnCours + largeurMot > largeurMax && ligneEnCours.length) {
+            poserLigne();
+            if (/^\s+$/.test(mot.texte)) return;
+          }
+          ligneEnCours.push(mot);
+          largeurEnCours += largeurMot;
+        });
+        poserLigne();
       }
 
       const lignesSource = markdownPropre.split("\n");
@@ -1050,18 +1138,18 @@ function genererPdf(markdown, nomFichier) {
         }
 
         if (ligne.startsWith("### ")) {
-          ecrireLigne(nettoyerGras(ligne.slice(4)).texte, 12, true, 0, 5.5, 3, [71, 85, 105]);
+          ecrireLigne(ligne.slice(4), 12, true, 0, 5.5, 3, [71, 85, 105]);
           return;
         }
         if (ligne.startsWith("## ")) {
-          ecrireLigne(nettoyerGras(ligne.slice(3)).texte, 14, true, 0, 6.5, 5, [37, 99, 235]);
+          ecrireLigne(ligne.slice(3), 14, true, 0, 6.5, 5, [37, 99, 235]);
           nouvellePageSiNecessaire(2);
           doc.setDrawColor(219, 234, 254);
           doc.line(margeGauche, y - 4, margeGauche + 30, y - 4);
           return;
         }
         if (ligne.startsWith("# ")) {
-          ecrireLigne(nettoyerGras(ligne.slice(2)).texte, 20, true, 0, 8, 5, [15, 23, 42]);
+          ecrireLigne(ligne.slice(2), 20, true, 0, 8, 5, [15, 23, 42]);
           if (premierTitre) {
             nouvellePageSiNecessaire(3);
             doc.setDrawColor(37, 99, 235);
@@ -1075,13 +1163,11 @@ function genererPdf(markdown, nomFichier) {
         }
         if (/^[-*]\s+/.test(ligne)) {
           const contenu = ligne.replace(/^[-*]\s+/, "");
-          const info = nettoyerGras(contenu);
-          ecrireLigne("-  " + info.texte, 11, info.gras, 4, 5.5, 1);
+          ecrireLigne("-  " + contenu, 11, false, 4, 5.5, 1);
           return;
         }
 
-        const info = nettoyerGras(ligne);
-        ecrireLigne(info.texte, 11, info.gras, 0, 5.8, 2.2);
+        ecrireLigne(ligne, 11, false, 0, 5.8, 2.2);
       });
 
       const uri = doc.output("datauristring");
