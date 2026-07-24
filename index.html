@@ -80,7 +80,7 @@
   .apercu h2 { font-size: 17px; margin: 16px 0 6px; }
   .apercu h3 { font-size: 15px; margin: 13px 0 5px; }
   .apercu ul, .apercu ol { padding-left: 20px; margin: 6px 0; }
-  .apercu p { margin: 0 0 11px; line-height: 1.65; }
+  .apercu p { margin: 0 0 17px; line-height: 1.65; }
   .apercu hr { border: none; border-top: 1px solid #e2e8f0; margin: 14px 0; }
 
   .coche { display: flex; align-items: center; gap: 9px; margin-bottom: 11px; font-size: 14px; }
@@ -853,6 +853,10 @@ function recollerLignes(texte) {
   function estTitre(l) { return /^#{1,6}\s/.test(l.trim()); }
   function estPuce(l) { return /^[-*]\s/.test(l.trim()); }
   function estSeparateur(l) { return /^---+$/.test(l.trim()); }
+  // Une rubrique du type "Competences professionnelles : ..."
+  function estRubrique(l) {
+    return /^[A-Z\u00c0-\u00dd][^:]{1,45}\s:\s/.test(l.trim());
+  }
 
   lignes.forEach(function (brute) {
     const ligne = brute.trim();
@@ -870,6 +874,7 @@ function recollerLignes(texte) {
       !estPuce(ligne) &&
       !estSeparateur(ligne) &&
       !debutDeBloc.test(ligne) &&              // ni une nouvelle date
+      !estRubrique(ligne) &&                   // ni une nouvelle rubrique
       !/[.!?:]$/.test(precedente.trim()) &&    // la precedente ne se termine pas
       precedente.indexOf("@") === -1 &&        // ni coordonnees
       ligne.indexOf("@") === -1;
@@ -905,12 +910,27 @@ function aererParagraphes(texte) {
     if (!ligne.trim() || !suivante.trim()) continue;
 
     function estPuce(l) { return /^[-*]\s/.test(l.trim()); }
+    function estTitreLigne(l) { return /^#{1,6}\s/.test(l.trim()); }
+    function ouvreUnBloc(l) {
+      const t = l.trim();
+      const mois = /^(janvier|fevrier|f\u00e9vrier|mars|avril|mai|juin|juillet|aout|ao\u00fbt|septembre|octobre|novembre|d\u00e9cembre|decembre)/i;
+      const annee = /^(19|20)\d{2}\b/;
+      const rubrique = /^[A-Z\u00c0-\u00dd][^:]{1,45}\s:\s/;
+      return mois.test(t) || annee.test(t) || rubrique.test(t);
+    }
 
     // Fin d'une liste suivie d'autre chose : on separe les blocs
     if (estPuce(ligne) && !estPuce(suivante)) {
       sortie.push("");
       continue;
     }
+
+    // Nouveau bloc date ou nouvelle rubrique : on aere avant
+    if (!estTitreLigne(ligne) && !estPuce(suivante) && ouvreUnBloc(suivante)) {
+      sortie.push("");
+      continue;
+    }
+
     if (estStructure(ligne) || estStructure(suivante)) continue;
 
     const finDePhrase = /[.!?]["»)\]]?$/.test(ligne.trim());
@@ -1183,7 +1203,7 @@ function genererPdf(markdown, nomFichier) {
       lignesSource.forEach(function (ligneBrute) {
         const ligne = ligneBrute.trim();
 
-        if (ligne === "") { y += 3; return; }
+        if (ligne === "") { y += 5; return; }
 
         if (/^---+$/.test(ligne)) {
           nouvellePageSiNecessaire(6);
