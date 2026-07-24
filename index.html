@@ -130,6 +130,12 @@
     font-size: 12px; color: #16a34a; align-self: center;
     margin-left: auto; font-weight: 600;
   }
+  .indicateur-pages {
+    font-size: 12px; font-weight: 600; align-self: center;
+    padding: 4px 10px; border-radius: 999px; margin-left: 6px;
+  }
+  .page-ok { background: #dcfce7; color: #166534; }
+  .page-trop { background: #fef3c7; color: #78350f; }
   .rang-origine {
     display: flex; align-items: center; gap: 10px;
     background: #f8fafc; border: 1px solid #e2e8f0;
@@ -257,6 +263,7 @@
     <div class="onglets">
       <button class="onglet actif" data-vue="edition">Modifier</button>
       <button class="onglet" data-vue="apercu">Apercu</button>
+      <span class="indicateur-pages" id="indicateur-pages"></span>
       <span class="etat-sauvegarde" id="etat-sauvegarde"></span>
     </div>
 
@@ -473,6 +480,7 @@ function insererModele() {
   majApercu();
   majOptionsEnvoi();
   majBoutonModele();
+  majIndicateurPages();
   afficherMsg("Modele insere. Remplace les crochets [ ] par tes informations.", "info");
 }
 let candidatures = [];
@@ -562,6 +570,7 @@ function sauverDoc() {
   ecrire("documents", documents);
   majOptionsEnvoi();
   majBoutonModele();
+  majIndicateurPages();
 
   const etat = document.getElementById("etat-sauvegarde");
   if (etat) {
@@ -577,6 +586,28 @@ function sauvegardeAuto() {
   const etat = document.getElementById("etat-sauvegarde");
   if (etat) etat.textContent = "...";
   minuteurFrappe = setTimeout(sauverDoc, 700);
+}
+
+function majIndicateurPages() {
+  const zone = document.getElementById("indicateur-pages");
+  if (!zone) return;
+
+  const texte = document.getElementById("editeur").value;
+  const pages = compterPages(texte);
+
+  if (pages <= 0) {
+    zone.textContent = "";
+    zone.className = "indicateur-pages";
+    return;
+  }
+
+  if (pages === 1) {
+    zone.textContent = "1 page";
+    zone.className = "indicateur-pages page-ok";
+  } else {
+    zone.textContent = pages + " pages";
+    zone.className = "indicateur-pages page-trop";
+  }
 }
 
 function majBoutonModele() {
@@ -891,63 +922,6 @@ function recollerLignes(texte) {
 }
 
 
-function aererParagraphes(texte) {
-  const lignes = texte.split("\n");
-  const sortie = [];
-
-  function estStructure(l) {
-    return /^(#{1,6}\s|[-*]\s|---+$)/.test(l.trim());
-  }
-  function estFormuleAppel(l) {
-    return /^(madame|monsieur|messieurs|mesdames)\b/i.test(l.trim());
-  }
-
-  for (let i = 0; i < lignes.length; i++) {
-    const ligne = lignes[i];
-    sortie.push(ligne);
-
-    const suivante = lignes[i + 1];
-    if (suivante === undefined) continue;
-    if (!ligne.trim() || !suivante.trim()) continue;
-
-    function estPuce(l) { return /^[-*]\s/.test(l.trim()); }
-    function estTitreLigne(l) { return /^#{1,6}\s/.test(l.trim()); }
-    function ouvreUnBloc(l) {
-      const t = l.trim();
-      const mois = /^(janvier|fevrier|f\u00e9vrier|mars|avril|mai|juin|juillet|aout|ao\u00fbt|septembre|octobre|novembre|d\u00e9cembre|decembre)/i;
-      const annee = /^(19|20)\d{2}\b/;
-      const rubrique = /^[A-Z\u00c0-\u00dd][^:]{1,45}\s:\s/;
-      return mois.test(t) || annee.test(t) || rubrique.test(t);
-    }
-
-    // Fin d'une liste suivie d'autre chose : on separe les blocs
-    if (estPuce(ligne) && !estPuce(suivante)) {
-      sortie.push("");
-      continue;
-    }
-
-    // Nouveau bloc date ou nouvelle rubrique : on aere avant
-    if (!estTitreLigne(ligne) && !estPuce(suivante) && ouvreUnBloc(suivante)) {
-      sortie.push("");
-      continue;
-    }
-
-    if (estStructure(ligne) || estStructure(suivante)) continue;
-
-    const finDePhrase = /[.!?]["»)\]]?$/.test(ligne.trim());
-    const appelEnCours = estFormuleAppel(ligne);
-    const appelSuivant = estFormuleAppel(suivante);
-
-    if (finDePhrase || appelEnCours || appelSuivant) {
-      sortie.push("");
-    }
-  }
-
-  return sortie.join("\n").replace(/\n{3,}/g, "\n\n");
-}
-
-// Met en italique l'intitule de poste dans les lignes du type
-// "Fevrier 2025 - Fevrier 2026 : Conseillere en insertion, Mission locale"
 function italiserMetiers(texte) {
   const mois = "janvier|fevrier|f\u00e9vrier|mars|avril|mai|juin|juillet|aout|ao\u00fbt|" +
                "septembre|octobre|novembre|decembre|d\u00e9cembre";
@@ -997,12 +971,10 @@ async function extraireContenu(fichier) {
     throw new Error("Format non gere : " + fichier.name);
   }
 
+  // Les espacements sont laisses a l'appreciation de l'utilisatrice :
+  // aucune ligne vide n'est ajoutee automatiquement.
   resultat.texte = italiserMetiers(
-    aererParagraphes(
-      recollerLignes(
-        nettoyerSymbolesPuces(resultat.texte)
-      )
-    )
+    recollerLignes(nettoyerSymbolesPuces(resultat.texte))
   );
   return resultat;
 }
@@ -1043,6 +1015,7 @@ async function traiterImportOriginal(evenement) {
 
     majAffichageFichiers();
     majBoutonModele();
+    majIndicateurPages();
     afficherMsg("Fichier original enregistre : " + fichier.name, "ok");
   } catch (err) {
     afficherMsg("Import impossible.", "ko");
@@ -1083,6 +1056,7 @@ async function traiterImportEditeur(evenement) {
     afficherDoc();
     majOptionsEnvoi();
     majBoutonModele();
+    majIndicateurPages();
 
     let message = "Texte importe dans la version modifiable.";
     if (resultat.brut) {
@@ -1132,9 +1106,7 @@ function styleHelvetica(gras, italique) {
   return "normal";
 }
 
-function genererPdf(markdown, nomFichier) {
-  return new Promise((resolve, reject) => {
-    try {
+function construireDocument(markdown) {
       const markdownPropre = nettoyerSymbolesPuces(markdown);
       const jsPDF = window.jspdf.jsPDF;
       const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -1266,12 +1238,29 @@ function genererPdf(markdown, nomFichier) {
         ecrireLigne(ligne, 11, false, 0, 5.8, 2.2);
       });
 
+      return doc;
+}
+
+function genererPdf(markdown) {
+  return new Promise(function (resolve, reject) {
+    try {
+      const doc = construireDocument(markdown);
       const uri = doc.output("datauristring");
       resolve(uri.split("base64,")[1]);
     } catch (err) {
       reject(err);
     }
   });
+}
+
+// Nombre de pages qu'occuperait le texte, sans produire de fichier
+function compterPages(markdown) {
+  if (!markdown || !markdown.trim()) return 0;
+  try {
+    return construireDocument(markdown).getNumberOfPages();
+  } catch (err) {
+    return -1;
+  }
 }
 
 // =======================================================
@@ -1548,6 +1537,7 @@ document.querySelectorAll("[data-doc]").forEach(b => {
     afficherDoc();
     majAffichageFichiers();
     majBoutonModele();
+    majIndicateurPages();
   });
 });
 
@@ -1578,6 +1568,7 @@ chargerConfig();
 chargerDocuments();
 chargerFichiersOrigine();
 majBoutonModele();
+majIndicateurPages();
 candidatures = lire("candidatures", []);
 rafraichir();
 </script>
