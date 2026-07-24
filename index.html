@@ -113,6 +113,24 @@
   .rang-fichier select {
     width: auto; margin: 0; padding: 7px 10px; font-size: 13px;
   }
+  .bloc-fichier { margin-bottom: 12px; }
+  .etiquette-fichier {
+    font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 5px;
+  }
+  .rang-origine {
+    display: flex; align-items: center; gap: 10px;
+    background: #f8fafc; border: 1px solid #e2e8f0;
+    border-radius: 8px; padding: 10px 12px;
+  }
+  .nom-fichier {
+    flex: 1; font-size: 13px; color: #334155;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .vide-fichier { color: #94a3b8; font-style: italic; }
+  .poids { color: #94a3b8; }
+  .rang-origine button {
+    padding: 6px 12px; font-size: 12px; font-weight: 500;
+  }
 
   .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(102px, 1fr)); gap: 9px; margin-bottom: 16px; }
   .stat { border-radius: 10px; padding: 12px; }
@@ -212,9 +230,18 @@
     </div>
 
     <div class="import">
-      <p>Importe tes documents existants. Tu peux en selectionner plusieurs d'un coup. Word et OpenDocument (.odt) donnent le meilleur resultat.</p>
+      <p>Importe tes documents existants. Tu peux en selectionner plusieurs d'un coup. Le fichier original est conserve tel quel, et son texte est repris dans l'editeur ci-dessous.</p>
       <input type="file" id="fichier-import" accept=".docx,.odt,.pdf,.txt,.md" multiple>
       <div id="affectation" class="cache"></div>
+    </div>
+
+    <div class="bloc-fichier">
+      <div class="etiquette-fichier">Fichier original du CV</div>
+      <div class="rang-origine" id="fichier-cv"></div>
+    </div>
+    <div class="bloc-fichier">
+      <div class="etiquette-fichier">Fichier original de la lettre</div>
+      <div class="rang-origine" id="fichier-lm"></div>
     </div>
 
     <div class="onglets">
@@ -272,15 +299,11 @@
       </div>
     </div>
 
-    <label>Pieces jointes</label>
-    <div class="coche">
-      <input type="checkbox" id="joindre-cv" checked>
-      <label for="joindre-cv" style="margin:0;font-weight:500">Joindre mon CV en PDF</label>
-    </div>
-    <div class="coche">
-      <input type="checkbox" id="joindre-lm" checked>
-      <label for="joindre-lm" style="margin:0;font-weight:500">Joindre ma lettre de motivation en PDF</label>
-    </div>
+    <label for="choix-cv">CV a joindre</label>
+    <select id="choix-cv"></select>
+
+    <label for="choix-lm">Lettre de motivation a joindre</label>
+    <select id="choix-lm"></select>
 
     <button class="principal" id="btn-envoyer">Envoyer ma candidature</button>
   </div>
@@ -301,6 +324,83 @@
 // =======================================================
 let config = { nom: "", serveur: "" };
 let documents = { cv: "", lm: "" };
+let fichiersOrigine = { cv: null, lm: null };
+
+function chargerFichiersOrigine() {
+  fichiersOrigine = lire("fichiersOrigine", { cv: null, lm: null });
+  majAffichageFichiers();
+}
+
+function sauverFichiersOrigine() {
+  try {
+    ecrire("fichiersOrigine", fichiersOrigine);
+    return true;
+  } catch (e) {
+    afficherMsg(
+      "Fichier trop volumineux pour etre conserve sur cet appareil. " +
+      "Reduis sa taille, ou utilise la version editeur.",
+      "ko"
+    );
+    return false;
+  }
+}
+
+function poidsLisible(base64) {
+  const octets = Math.round((base64.length * 3) / 4);
+  if (octets > 1048576) return (octets / 1048576).toFixed(1) + " Mo";
+  return Math.round(octets / 1024) + " Ko";
+}
+
+function majAffichageFichiers() {
+  ["cv", "lm"].forEach(function (cle) {
+    const zone = document.getElementById("fichier-" + cle);
+    if (!zone) return;
+    const f = fichiersOrigine[cle];
+    if (f) {
+      zone.innerHTML =
+        '<span class="nom-fichier">' + f.nom + ' <span class="poids">(' + poidsLisible(f.base64) + ')</span></span>' +
+        '<button class="b-rouge" onclick="retirerFichierOrigine(\'' + cle + '\')">Retirer</button>';
+      zone.classList.remove("cache");
+    } else {
+      zone.innerHTML = '<span class="nom-fichier vide-fichier">Aucun fichier original conserve</span>';
+      zone.classList.remove("cache");
+    }
+  });
+  majOptionsEnvoi();
+}
+
+function retirerFichierOrigine(cle) {
+  fichiersOrigine[cle] = null;
+  sauverFichiersOrigine();
+  majAffichageFichiers();
+  afficherMsg("Fichier original retire.", "ok");
+}
+
+function majOptionsEnvoi() {
+  ["cv", "lm"].forEach(function (cle) {
+    const select = document.getElementById("choix-" + cle);
+    if (!select) return;
+    const valeurActuelle = select.value;
+    const f = fichiersOrigine[cle];
+    const texteDoc = documents[cle] && documents[cle].trim();
+
+    let html = '<option value="rien">Ne pas joindre</option>';
+    if (f) html += '<option value="original">Fichier original : ' + f.nom + '</option>';
+    if (texteDoc) html += '<option value="editeur">Version editeur (PDF genere)</option>';
+
+    select.innerHTML = html;
+
+    if (valeurActuelle && select.querySelector('option[value="' + valeurActuelle + '"]')) {
+      select.value = valeurActuelle;
+    } else if (f) {
+      select.value = "original";
+    } else if (texteDoc) {
+      select.value = "editeur";
+    } else {
+      select.value = "rien";
+    }
+  });
+}
 
 const MODELE_CV =
 "# [Prenom NOM]\n" +
@@ -438,6 +538,7 @@ function majApercu() {
 function sauverDoc() {
   documents[docActif] = document.getElementById("editeur").value;
   ecrire("documents", documents);
+  majOptionsEnvoi();
   afficherMsg(docActif === "cv" ? "CV enregistre." : "Lettre de motivation enregistree.", "ok");
 }
 
@@ -476,6 +577,7 @@ function lireFichier(fichier, mode) {
     lecteur.onload = function () { resolve(lecteur.result); };
     lecteur.onerror = function () { reject(new Error("Lecture impossible")); };
     if (mode === "buffer") lecteur.readAsArrayBuffer(fichier);
+    else if (mode === "dataurl") lecteur.readAsDataURL(fichier);
     else lecteur.readAsText(fichier);
   });
 }
@@ -788,12 +890,22 @@ async function lancerImport() {
       }
 
       documents[cible] = resultat.texte;
+
+      // Conserve aussi le fichier original tel quel
+      const dataUrl = await lireFichier(fichier, "dataurl");
+      fichiersOrigine[cible] = {
+        nom: fichier.name,
+        base64: dataUrl.split("base64,")[1]
+      };
+
       if (resultat.brut) pdfPresent = true;
       importes.push(cible === "cv" ? "CV" : "lettre de motivation");
     }
 
     ecrire("documents", documents);
+    sauverFichiersOrigine();
     afficherDoc();
+    majAffichageFichiers();
 
     const zone = document.getElementById("affectation");
     zone.classList.add("cache");
@@ -801,14 +913,9 @@ async function lancerImport() {
     document.getElementById("fichier-import").value = "";
     fichiersEnAttente = [];
 
-    let message = "Import termine : " + importes.join(" et ") + ".";
-    if (pdfPresent) {
-      message += " Les titres et le gras d'un PDF sont devines automatiquement : verifie qu'ils sont corrects dans Apercu avant d'enregistrer.";
-      afficherMsg(message, "info");
-    } else {
-      message += " Verifie le rendu dans Apercu, puis enregistre.";
-      afficherMsg(message, "ok");
-    }
+    let message = "Import termine : " + importes.join(" et ") +
+      ". Le fichier original est conserve, et son texte est modifiable dans l'editeur.";
+    afficherMsg(message, "ok");
   } catch (err) {
     afficherMsg("Import impossible.", "ko");
     afficherDebug(String(err));
@@ -1067,15 +1174,15 @@ async function envoyer() {
     return;
   }
 
-  const avecCv = document.getElementById("joindre-cv").checked;
-  const avecLm = document.getElementById("joindre-lm").checked;
+  const choixCv = document.getElementById("choix-cv").value;
+  const choixLm = document.getElementById("choix-lm").value;
 
-  if (avecCv && !documents.cv.trim()) {
-    afficherMsg("Ton CV est vide. Ecris-le dans Mes documents ou decoche la case.", "info");
+  if (choixCv === "editeur" && !documents.cv.trim()) {
+    afficherMsg("Ton CV est vide dans l'editeur. Ecris-le ou choisis une autre option.", "info");
     return;
   }
-  if (avecLm && !documents.lm.trim()) {
-    afficherMsg("Ta lettre est vide. Ecris-la dans Mes documents ou decoche la case.", "info");
+  if (choixLm === "editeur" && !documents.lm.trim()) {
+    afficherMsg("Ta lettre est vide dans l'editeur. Ecris-la ou choisis une autre option.", "info");
     return;
   }
 
@@ -1086,7 +1193,14 @@ async function envoyer() {
     const pieces = [];
     const nomsPieces = [];
 
-    if (avecCv) {
+    // --- CV ---
+    if (choixCv === "original" && fichiersOrigine.cv) {
+      pieces.push({
+        filename: fichiersOrigine.cv.nom,
+        content: fichiersOrigine.cv.base64
+      });
+      nomsPieces.push("CV");
+    } else if (choixCv === "editeur") {
       bouton.textContent = "Creation du PDF du CV...";
       afficherMsg("Creation du PDF du CV...", "info");
       const base64 = await genererPdf(documents.cv, "CV.pdf");
@@ -1094,7 +1208,14 @@ async function envoyer() {
       nomsPieces.push("CV");
     }
 
-    if (avecLm) {
+    // --- Lettre de motivation ---
+    if (choixLm === "original" && fichiersOrigine.lm) {
+      pieces.push({
+        filename: fichiersOrigine.lm.nom,
+        content: fichiersOrigine.lm.base64
+      });
+      nomsPieces.push("LM");
+    } else if (choixLm === "editeur") {
       bouton.textContent = "Creation du PDF de la lettre...";
       afficherMsg("Creation du PDF de la lettre...", "info");
       const base64 = await genererPdf(documents.lm, "LM.pdf");
@@ -1138,8 +1259,8 @@ async function envoyer() {
       pieces: nomsPieces,
       apercuOuvert: false,
       snapshotMail: texteEmail(poste, contrat),
-      snapshotCv: avecCv ? documents.cv : "",
-      snapshotLm: avecLm ? documents.lm : ""
+      snapshotCv: choixCv === "editeur" ? documents.cv : "",
+      snapshotLm: choixLm === "editeur" ? documents.lm : ""
     });
     ecrire("candidatures", candidatures);
     rafraichir();
@@ -1205,6 +1326,7 @@ document.querySelectorAll("[data-md]").forEach(b => {
 // =======================================================
 chargerConfig();
 chargerDocuments();
+chargerFichiersOrigine();
 candidatures = lire("candidatures", []);
 rafraichir();
 </script>
