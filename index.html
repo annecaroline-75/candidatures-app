@@ -79,7 +79,8 @@
   .apercu h1 { font-size: 21px; margin: 0 0 8px; }
   .apercu h2 { font-size: 17px; margin: 16px 0 6px; }
   .apercu h3 { font-size: 15px; margin: 13px 0 5px; }
-  .apercu ul, .apercu ol { padding-left: 20px; margin: 6px 0; }
+  .apercu ul, .apercu ol { padding-left: 20px; margin: 9px 0 14px; }
+  .apercu li { margin-bottom: 4px; }
   .apercu p { margin: 0 0 17px; line-height: 1.65; }
   .apercu hr { border: none; border-top: 1px solid #e2e8f0; margin: 14px 0; }
 
@@ -950,9 +951,13 @@ function aererParagraphes(texte) {
 function italiserMetiers(texte) {
   const mois = "janvier|fevrier|f\u00e9vrier|mars|avril|mai|juin|juillet|aout|ao\u00fbt|" +
                "septembre|octobre|novembre|decembre|d\u00e9cembre";
-  const motif = new RegExp(
-    "^([^:]*(?:" + mois + "|\\b(?:19|20)\\d{2})[^:]*)\\s*:\\s*([^,]+)(,?)(.*)$", "i"
-  );
+  const uneDate = "(?:(?:" + mois + ")\\s*\\d{4}|(?:19|20)\\d{2})";
+  const plageDates = "(?:" + uneDate + ")(?:\\s*[\u2013\u2014-]\\s*(?:" + uneDate + "))?";
+
+  // "Fevrier 2025 - Fevrier 2026 : Conseillere en insertion, Mission locale"
+  const avecDeuxPoints = new RegExp("^(" + plageDates + ")\\s*:\\s*([^,]+)(,?)([\\s\\S]*)$", "i");
+  // "2024 - 2025 Titre professionnel de CISP, Institut de Management"
+  const sansDeuxPoints = new RegExp("^(" + plageDates + ")\\s+([^,]+)(,?)([\\s\\S]*)$", "i");
 
   return texte.split("\n").map(function (ligne) {
     const t = ligne.trim();
@@ -960,13 +965,19 @@ function italiserMetiers(texte) {
     if (/^(#{1,6}\s|[-*]\s|---+$)/.test(t)) return ligne;
     if (t.indexOf("*") !== -1) return ligne; // deja mis en forme
 
-    const trouve = t.match(motif);
+    let trouve = t.match(avecDeuxPoints);
+    let separateur = " : ";
+
+    if (!trouve) {
+      trouve = t.match(sansDeuxPoints);
+      separateur = " ";
+    }
     if (!trouve) return ligne;
 
-    const metier = trouve[2].trim();
-    if (metier.length < 3 || metier.length > 90) return ligne;
+    const intitule = trouve[2].trim();
+    if (intitule.length < 3 || intitule.length > 90) return ligne;
 
-    return trouve[1].trim() + " : *" + metier + "*" + trouve[3] + trouve[4];
+    return trouve[1].trim() + separateur + "*" + intitule + "*" + trouve[3] + trouve[4];
   }).join("\n");
 }
 
@@ -1200,10 +1211,12 @@ function genererPdf(markdown, nomFichier) {
       const lignesSource = markdownPropre.split("\n");
       let premierTitre = true;
 
+      let precedenteEtaitPuce = false;
+
       lignesSource.forEach(function (ligneBrute) {
         const ligne = ligneBrute.trim();
 
-        if (ligne === "") { y += 5; return; }
+        if (ligne === "") { y += 5; precedenteEtaitPuce = false; return; }
 
         if (/^---+$/.test(ligne)) {
           nouvellePageSiNecessaire(6);
@@ -1216,6 +1229,7 @@ function genererPdf(markdown, nomFichier) {
 
         if (ligne.startsWith("### ")) {
           ecrireLigne(ligne.slice(4), 12, true, 0, 5.5, 3, [71, 85, 105]);
+          precedenteEtaitPuce = false;
           return;
         }
         if (ligne.startsWith("## ")) {
@@ -1223,6 +1237,7 @@ function genererPdf(markdown, nomFichier) {
           nouvellePageSiNecessaire(2);
           doc.setDrawColor(219, 234, 254);
           doc.line(margeGauche, y - 4, margeGauche + 30, y - 4);
+          precedenteEtaitPuce = false;
           return;
         }
         if (ligne.startsWith("# ")) {
@@ -1240,10 +1255,14 @@ function genererPdf(markdown, nomFichier) {
         }
         if (/^[-*]\s+/.test(ligne)) {
           const contenu = ligne.replace(/^[-*]\s+/, "");
-          ecrireLigne("-  " + contenu, 11, false, 4, 5.5, 1);
+          // Petit espace avant la premiere tache d'un poste
+          const avant = precedenteEtaitPuce ? 1 : 2.5;
+          ecrireLigne("-  " + contenu, 11, false, 4, 5.5, avant);
+          precedenteEtaitPuce = true;
           return;
         }
 
+        precedenteEtaitPuce = false;
         ecrireLigne(ligne, 11, false, 0, 5.8, 2.2);
       });
 
