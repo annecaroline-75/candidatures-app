@@ -44,6 +44,29 @@
   .rang-note .note-titre { flex: 1; font-weight: 600; color: #0f172a; font-size: 15px; }
   .rang-note .note-date { font-size: 12px; color: #94a3b8; white-space: nowrap; }
   .note-vide { color: #94a3b8; padding: 8px 0 4px; font-size: 14px; }
+  .carte-entretien {
+    border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 15px; margin-bottom: 10px;
+  }
+  .carte-entretien.passe { opacity: 0.55; }
+  .carte-entretien.aujourdhui { border-color: #2563eb; border-width: 2px; background: #eff6ff; }
+  .ent-quand {
+    font-size: 15px; font-weight: 700; color: #1e3a8a; margin-bottom: 3px;
+  }
+  .ent-quand .badge-jour {
+    background: #2563eb; color: #fff; font-size: 11px; font-weight: 600;
+    padding: 2px 8px; border-radius: 999px; margin-left: 8px;
+  }
+  .ent-titre { font-weight: 600; color: #0f172a; }
+  .ent-lieu { font-size: 13px; color: #64748b; margin-top: 3px; }
+  .ent-actions { display: flex; gap: 7px; flex-wrap: wrap; margin-top: 11px; }
+  .ent-actions a, .ent-actions button {
+    padding: 8px 13px; font-size: 13px; font-weight: 500;
+    border: none; border-radius: 8px; cursor: pointer;
+    text-decoration: none; font-family: inherit;
+  }
+  .ent-agenda { background: #dbeafe; color: #1e40af; }
+  .ent-suppr { background: #fee2e2; color: #991b1b; }
 
   h1 { font-size: 25px; margin: 0 0 2px; letter-spacing: -0.5px; }
   .sub { color: #64748b; margin: 0 0 20px; font-size: 14px; }
@@ -238,6 +261,14 @@
   .attente { background: #fef3c7; color: #78350f; }
   .repondue { background: #dcfce7; color: #166534; }
   .aboutie { background: #e0f2fe; color: #075985; }
+  .positive { background: #dcfce7; color: #166534; }
+  .negative { background: #fee2e2; color: #991b1b; }
+  .select-statut {
+    padding: 7px 10px; font-size: 13px; font-weight: 500;
+    border: 1px solid #cbd5e1; border-radius: 8px;
+    background: #fff; color: #334155; font-family: inherit; cursor: pointer;
+    margin: 0;
+  }
   .pj { background: #e0e7ff; color: #3730a3; margin-left: 0; margin-top: 5px; }
   .meta { font-size: 14px; color: #475569; }
   .date { font-size: 12px; color: #64748b; margin-bottom: 10px; }
@@ -303,6 +334,7 @@
   <div class="menu-pages">
     <button class="onglet-page actif" data-page="envoi">Documents &amp; envoi</button>
     <button class="onglet-page" data-page="suivi">Suivi &amp; relances</button>
+    <button class="onglet-page" data-page="entretiens">Entretiens</button>
     <button class="onglet-page" data-page="notes">Notes</button>
   </div>
 
@@ -466,6 +498,42 @@
   </div>
 
   </div><!-- fin page-suivi -->
+
+  <!-- ================= PAGE ENTRETIENS ================= -->
+  <div class="page cache" id="page-entretiens">
+  <div class="carte">
+    <h2>Mes entretiens</h2>
+    <p class="aide">
+      Note tes entretiens a venir. Le bouton "Ajouter a mon agenda" cree l'evenement
+      dans le calendrier de ton telephone, qui te previendra a l'heure.
+    </p>
+
+    <div class="grille">
+      <div>
+        <label for="ent-entreprise">Entreprise</label>
+        <input type="text" id="ent-entreprise" placeholder="Mission Locale de...">
+      </div>
+      <div>
+        <label for="ent-poste">Poste</label>
+        <input type="text" id="ent-poste" placeholder="Conseillere en insertion">
+      </div>
+      <div>
+        <label for="ent-date">Date</label>
+        <input type="date" id="ent-date">
+      </div>
+      <div>
+        <label for="ent-heure">Heure</label>
+        <input type="time" id="ent-heure">
+      </div>
+    </div>
+    <label for="ent-lieu">Lieu ou lien visio (optionnel)</label>
+    <input type="text" id="ent-lieu" placeholder="Adresse, ou lien de la visio">
+
+    <button class="principal" id="btn-ajouter-entretien">Ajouter cet entretien</button>
+
+    <div id="liste-entretiens" style="margin-top:20px"></div>
+  </div>
+  </div><!-- fin page-entretiens -->
 
   <!-- ================= PAGE NOTES ================= -->
   <div class="page cache" id="page-notes">
@@ -1493,12 +1561,21 @@ function compterPages(markdown) {
 // =======================================================
 //  AFFICHAGE STATS + LISTE
 // =======================================================
+var STATUTS = ["En attente", "Demande entretien", "Reponse post-entretien positive", "Reponse post-entretien negative"];
+
+var COULEUR_STATUT = {
+  "En attente": "attente",
+  "Demande entretien": "repondue",
+  "Reponse post-entretien positive": "positive",
+  "Reponse post-entretien negative": "negative"
+};
+
 function majStats() {
   const blocs = [
-    { l: "Total",              v: candidatures.length, bg: "#eff6ff", fg: "#1e3a8a" },
-    { l: "Entretien",          v: candidatures.filter(c => c.statut === "Entretien").length, bg: "#dcfce7", fg: "#166534" },
-    { l: "Reponse entretien",  v: candidatures.filter(c => c.statut === "Reponse entretien").length, bg: "#e0f2fe", fg: "#075985" },
-    { l: "Relances",           v: candidatures.filter(c => c.relance).length, bg: "#f3e8ff", fg: "#6b21a8" }
+    { l: "Total",            v: candidatures.length, bg: "#eff6ff", fg: "#1e3a8a" },
+    { l: "Demande entretien", v: candidatures.filter(c => c.statut === "Demande entretien").length, bg: "#dcfce7", fg: "#166534" },
+    { l: "Reponse positive",  v: candidatures.filter(c => c.statut === "Reponse post-entretien positive").length, bg: "#e0f2fe", fg: "#075985" },
+    { l: "Relances",          v: candidatures.filter(c => c.relance).length, bg: "#f3e8ff", fg: "#6b21a8" }
   ];
   document.getElementById("stats").innerHTML = blocs.map(b =>
     '<div class="stat" style="background:' + b.bg + ';color:' + b.fg + '">' +
@@ -1519,20 +1596,19 @@ function majListe() {
     return;
   }
   zone.innerHTML = candidatures.map(c => {
-    const classesParStatut = { "En attente": "attente", "Entretien": "repondue", "Reponse entretien": "aboutie" };
-    const libellesBouton = {
-      "En attente": "Marquer entretien obtenu",
-      "Entretien": "Marquer reponse recue",
-      "Reponse entretien": "Remettre en attente"
-    };
-    const cls = classesParStatut[c.statut] || "attente";
-    const lib = libellesBouton[c.statut] || "Marquer entretien obtenu";
+    const cls = COULEUR_STATUT[c.statut] || "attente";
     const btnRel = c.relance ? '' :
       '<button class="b-violet" onclick="relancer(' + c.id + ')">Noter une relance</button>';
     const infoRel = c.relance ? " — relancee le " + c.dateRelance : "";
     const pj = (c.pieces && c.pieces.length)
       ? '<div><span class="badge pj">' + c.pieces.join(" + ") + ' joints</span></div>'
       : '';
+
+    const options = STATUTS.map(function (s) {
+      return '<option' + (s === c.statut ? ' selected' : '') + '>' + s + '</option>';
+    }).join("");
+    const menuStatut =
+      '<select class="select-statut" onchange="changerStatut(' + c.id + ', this.value)">' + options + '</select>';
 
     const aUnApercu = !!c.snapshotMail;
     const libApercu = c.apercuOuvert ? "Masquer l'apercu" : "Voir ce qui a ete envoye";
@@ -1559,6 +1635,10 @@ function majListe() {
       panneauApercu = '<div class="apercu-hist">' + blocs + '</div>';
     }
 
+    const btnEntretien = (c.statut === "Demande entretien")
+      ? '<button class="b-bleu" onclick="preremplirEntretien(' + c.id + ')">Programmer l\'entretien</button>'
+      : '';
+
     return '<div class="ligne">' +
       '<div><span class="titre-ligne">' + c.poste + ' — ' + c.contrat + '</span>' +
       '<span class="badge ' + cls + '">' + c.statut + '</span></div>' +
@@ -1566,7 +1646,8 @@ function majListe() {
       pj +
       '<div class="date">Envoyee le ' + c.dateEnvoi + infoRel + '</div>' +
       '<div class="actions">' +
-        '<button class="b-bleu" onclick="basculerStatut(' + c.id + ')">' + lib + '</button>' +
+        menuStatut +
+        btnEntretien +
         btnRel +
         btnApercu +
         '<button class="b-rouge" onclick="supprimer(' + c.id + ')">Supprimer</button>' +
@@ -1586,10 +1667,9 @@ function toggleApercu(id) {
 
 function rafraichir() { majStats(); majListe(); majTableauRelances(); }
 
-function basculerStatut(id) {
-  const suivant = { "En attente": "Entretien", "Entretien": "Reponse entretien", "Reponse entretien": "En attente" };
+function changerStatut(id, nouveau) {
   candidatures = candidatures.map(c => c.id === id
-    ? Object.assign({}, c, { statut: suivant[c.statut] || "Entretien" })
+    ? Object.assign({}, c, { statut: nouveau })
     : c);
   ecrire("candidatures", candidatures); rafraichir();
 }
@@ -1747,10 +1827,162 @@ function pause(ms) {
 }
 
 // =======================================================
+//  ENTRETIENS
+// =======================================================
+let entretiens = [];
+
+function chargerEntretiens() {
+  entretiens = lire("entretiens", []);
+  dessinerEntretiens();
+}
+
+// Depuis une candidature : bascule vers l'onglet Entretiens avec entreprise et poste pre-remplis
+function preremplirEntretien(idCandidature) {
+  const c = candidatures.find(function (x) { return x.id === idCandidature; });
+  if (!c) return;
+  afficherPage("entretiens");
+  document.getElementById("ent-entreprise").value = c.entreprise || "";
+  document.getElementById("ent-poste").value = c.poste || "";
+  document.getElementById("ent-date").value = "";
+  document.getElementById("ent-heure").value = "";
+  document.getElementById("ent-lieu").value = "";
+  document.getElementById("ent-date").focus();
+  afficherMsg("Entreprise et poste pre-remplis. Ajoute la date et l'heure.", "info");
+}
+
+function ajouterEntretien() {
+  const entreprise = document.getElementById("ent-entreprise").value.trim();
+  const poste = document.getElementById("ent-poste").value.trim();
+  const date = document.getElementById("ent-date").value;
+  const heure = document.getElementById("ent-heure").value;
+  const lieu = document.getElementById("ent-lieu").value.trim();
+
+  if (!entreprise || !date || !heure) {
+    afficherMsg("Renseigne au moins l'entreprise, la date et l'heure.", "info");
+    return;
+  }
+
+  entretiens.push({
+    id: Date.now(),
+    entreprise: entreprise, poste: poste,
+    date: date, heure: heure, lieu: lieu
+  });
+  ecrire("entretiens", entretiens);
+  dessinerEntretiens();
+
+  document.getElementById("ent-entreprise").value = "";
+  document.getElementById("ent-poste").value = "";
+  document.getElementById("ent-date").value = "";
+  document.getElementById("ent-heure").value = "";
+  document.getElementById("ent-lieu").value = "";
+
+  afficherMsg("Entretien ajoute.", "ok");
+}
+
+function supprimerEntretien(id) {
+  entretiens = entretiens.filter(function (e) { return e.id !== id; });
+  ecrire("entretiens", entretiens);
+  dessinerEntretiens();
+}
+
+function dessinerEntretiens() {
+  const zone = document.getElementById("liste-entretiens");
+  if (!zone) return;
+
+  if (entretiens.length === 0) {
+    zone.innerHTML = '<p class="note-vide">Aucun entretien programme.</p>';
+    return;
+  }
+
+  // tri chronologique
+  const tries = entretiens.slice().sort(function (a, b) {
+    return (a.date + a.heure).localeCompare(b.date + b.heure);
+  });
+
+  const auj = new Date();
+  const jourAuj = auj.toISOString().slice(0, 10);
+
+  zone.innerHTML = tries.map(function (e) {
+    const dt = new Date(e.date + "T" + e.heure);
+    const passe = dt < auj;
+    const estAuj = e.date === jourAuj;
+
+    const classe = "carte-entretien" + (passe ? " passe" : "") + (estAuj ? " aujourdhui" : "");
+    const dateLisible = dt.toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" });
+    const badgeJour = estAuj ? '<span class="badge-jour">Aujourd\'hui</span>' : "";
+
+    const titre = e.poste ? (e.poste + " — " + e.entreprise) : e.entreprise;
+    const lieu = e.lieu ? '<div class="ent-lieu">' + echapper(e.lieu) + '</div>' : "";
+
+    return '<div class="' + classe + '">' +
+      '<div class="ent-quand">' + dateLisible + ' a ' + e.heure + badgeJour + '</div>' +
+      '<div class="ent-titre">' + echapper(titre) + '</div>' +
+      lieu +
+      '<div class="ent-actions">' +
+        '<button class="ent-agenda" onclick="ajouterAgenda(' + e.id + ')">Ajouter a mon agenda</button>' +
+        '<button class="ent-suppr" onclick="supprimerEntretien(' + e.id + ')">Supprimer</button>' +
+      '</div>' +
+    '</div>';
+  }).join("");
+}
+
+// Cree et telecharge un fichier .ics : le telephone l'ouvre dans son agenda
+function ajouterAgenda(id) {
+  const e = entretiens.find(function (x) { return x.id === id; });
+  if (!e) return;
+
+  const debut = new Date(e.date + "T" + e.heure);
+  const fin = new Date(debut.getTime() + 60 * 60 * 1000); // 1h par defaut
+
+  function fmt(d) {
+    return d.getFullYear() +
+      String(d.getMonth() + 1).padStart(2, "0") +
+      String(d.getDate()).padStart(2, "0") + "T" +
+      String(d.getHours()).padStart(2, "0") +
+      String(d.getMinutes()).padStart(2, "0") + "00";
+  }
+
+  const titre = "Entretien - " + e.entreprise + (e.poste ? " (" + e.poste + ")" : "");
+  const lieu = e.lieu || "";
+
+  const ics = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Candidatures//FR",
+    "BEGIN:VEVENT",
+    "UID:" + e.id + "@candidatures",
+    "DTSTART:" + fmt(debut),
+    "DTEND:" + fmt(fin),
+    "SUMMARY:" + titre,
+    "LOCATION:" + lieu,
+    "DESCRIPTION:Entretien d'embauche",
+    "BEGIN:VALARM",
+    "TRIGGER:-PT1H",
+    "ACTION:DISPLAY",
+    "DESCRIPTION:Rappel entretien",
+    "END:VALARM",
+    "END:VEVENT",
+    "END:VCALENDAR"
+  ].join("\r\n");
+
+  const blob = new Blob([ics], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const lien = document.createElement("a");
+  lien.href = url;
+  lien.download = "entretien-" + e.entreprise.replace(/[^a-z0-9]/gi, "-") + ".ics";
+  document.body.appendChild(lien);
+  lien.click();
+  document.body.removeChild(lien);
+  setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+
+  afficherMsg("Fichier agenda cree. Ouvre-le pour l'ajouter a ton calendrier.", "ok");
+}
+
+// =======================================================
 //  NAVIGATION ENTRE PAGES
 // =======================================================
 function afficherPage(nom) {
-  ["envoi", "suivi", "notes"].forEach(function (p) {
+  ["envoi", "suivi", "entretiens", "notes"].forEach(function (p) {
     document.getElementById("page-" + p).classList.toggle("cache", p !== nom);
   });
   document.querySelectorAll("[data-page]").forEach(function (b) {
@@ -2193,6 +2425,7 @@ document.getElementById("btn-reglages").addEventListener("click", enregistrerCon
 document.getElementById("btn-frequence").addEventListener("click", enregistrerFrequence);
 document.getElementById("btn-texte-relance").addEventListener("click", enregistrerTexteRelance);
 document.getElementById("btn-nouvelle-note").addEventListener("click", nouvelleNote);
+document.getElementById("btn-ajouter-entretien").addEventListener("click", ajouterEntretien);
 document.getElementById("btn-fermer-note").addEventListener("click", fermerNote);
 document.getElementById("btn-supprimer-note").addEventListener("click", supprimerNoteActive);
 document.getElementById("titre-note").addEventListener("input", notesAuto);
@@ -2257,9 +2490,27 @@ chargerConfig();
 chargerDocuments();
 chargerFichiersOrigine();
 chargerNotes();
+chargerEntretiens();
 majBoutonModele();
 majIndicateurPages();
 candidatures = lire("candidatures", []);
+// Migration des anciens statuts vers les nouveaux libelles
+(function migrerStatuts() {
+  const correspondance = {
+    "Entretien": "Demande entretien",
+    "Reponse entretien": "Reponse post-entretien positive",
+    "Reponse recue": "Demande entretien"
+  };
+  let modifie = false;
+  candidatures = candidatures.map(function (c) {
+    if (correspondance[c.statut]) {
+      modifie = true;
+      return Object.assign({}, c, { statut: correspondance[c.statut] });
+    }
+    return c;
+  });
+  if (modifie) ecrire("candidatures", candidatures);
+})();
 rafraichir();
 
 // Relances automatiques : on laisse l'interface s'afficher, puis on traite
