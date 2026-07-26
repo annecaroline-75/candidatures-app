@@ -163,6 +163,16 @@
   .journal-ok { color: #166534; }
   .journal-ko { color: #991b1b; }
   .journal-attente { color: #64748b; }
+  .tab-relances {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+  }
+  .tab-relances th {
+    text-align: left; color: #64748b; font-weight: 600;
+    padding: 7px 8px; border-bottom: 2px solid #e2e8f0;
+  }
+  .tab-relances td {
+    padding: 8px; border-bottom: 1px solid #f1f5f9; color: #334155;
+  }
   .page-ok { background: #dcfce7; color: #166534; }
   .page-trop { background: #fef3c7; color: #78350f; }
   .rang-origine {
@@ -378,6 +388,36 @@
     <div id="progression-masse" class="cache"></div>
   </div>
 
+  <!-- ================= RELANCES ================= -->
+  <div class="carte">
+    <h2>Relances automatiques</h2>
+    <p class="aide">
+      L'app relance automatiquement les candidatures restees En attente, selon la frequence choisie.
+      Les relances partent a l'ouverture de l'app (elle doit etre ouverte a l'ecran).
+      Une candidature n'est plus relancee des qu'elle passe en Entretien.
+    </p>
+
+    <label for="frequence-relance">Frequence des relances</label>
+    <select id="frequence-relance">
+      <option value="aucune">Desactivees</option>
+      <option value="1 semaine">Toutes les semaines</option>
+      <option value="2 semaines">Toutes les 2 semaines</option>
+      <option value="3 semaines">Toutes les 3 semaines</option>
+      <option value="1 mois">Tous les mois</option>
+    </select>
+    <button class="secondaire" id="btn-frequence" style="margin-top:6px">Enregistrer la frequence</button>
+
+    <label for="texte-relance" style="margin-top:18px">Texte du mail de relance</label>
+    <p class="aide" style="margin-bottom:8px">
+      Ecris [poste] et [date] la ou ils doivent apparaitre : ils seront remplaces automatiquement.
+      La signature "Cordialement, ton nom" est ajoutee a la fin.
+    </p>
+    <textarea id="texte-relance" style="min-height:200px"></textarea>
+    <button class="secondaire" id="btn-texte-relance">Enregistrer le texte de relance</button>
+
+    <div id="tableau-relances" style="margin-top:18px"></div>
+  </div>
+
   <!-- ================= STATS + HISTORIQUE ================= -->
   <div class="stats" id="stats"></div>
 
@@ -573,9 +613,12 @@ function afficherDebug(texte) {
 //  REGLAGES
 // =======================================================
 function chargerConfig() {
-  config = lire("config", { nom: "", serveur: "" });
+  config = lire("config", { nom: "", serveur: "", frequenceRelance: "aucune", texteRelance: "" });
+  if (!config.frequenceRelance) config.frequenceRelance = "aucune";
   document.getElementById("r-nom").value = config.nom || "";
   document.getElementById("r-serveur").value = config.serveur || "";
+  document.getElementById("frequence-relance").value = config.frequenceRelance;
+  document.getElementById("texte-relance").value = config.texteRelance || RELANCE_DEFAUT;
   if (config.nom && config.serveur) replierReglages();
 }
 function replierReglages() {
@@ -587,9 +630,13 @@ function deplierReglages() {
   document.getElementById("btn-ouvrir-reglages").classList.add("cache");
 }
 function enregistrerConfig() {
+  const freq = config.frequenceRelance || "aucune";
+  const txtRelance = config.texteRelance || "";
   config = {
     nom: document.getElementById("r-nom").value.trim(),
-    serveur: document.getElementById("r-serveur").value.trim()
+    serveur: document.getElementById("r-serveur").value.trim(),
+    frequenceRelance: freq,
+    texteRelance: txtRelance
   };
   if (!config.nom || !config.serveur) {
     afficherMsg("Renseigne ton nom et l'adresse du serveur.", "info");
@@ -598,6 +645,26 @@ function enregistrerConfig() {
   ecrire("config", config);
   replierReglages();
   afficherMsg("Reglages enregistres.", "ok");
+}
+function enregistrerFrequence() {
+  config.frequenceRelance = document.getElementById("frequence-relance").value;
+  ecrire("config", config);
+  majTableauRelances();
+  if (config.frequenceRelance === "aucune") {
+    afficherMsg("Relances automatiques desactivees.", "ok");
+  } else {
+    afficherMsg("Frequence enregistree : " + config.frequenceRelance + ".", "ok");
+  }
+}
+function enregistrerTexteRelance() {
+  const txt = document.getElementById("texte-relance").value.trim();
+  if (!txt) {
+    afficherMsg("Le texte de relance ne peut pas etre vide.", "info");
+    return;
+  }
+  config.texteRelance = txt;
+  ecrire("config", config);
+  afficherMsg("Texte de relance enregistre.", "ok");
 }
 
 // =======================================================
@@ -1447,7 +1514,7 @@ function toggleApercu(id) {
 }
 
 
-function rafraichir() { majStats(); majListe(); }
+function rafraichir() { majStats(); majListe(); majTableauRelances(); }
 
 function basculerStatut(id) {
   const suivant = { "En attente": "Entretien", "Entretien": "Reponse entretien", "Reponse entretien": "En attente" };
@@ -1457,8 +1524,14 @@ function basculerStatut(id) {
   ecrire("candidatures", candidatures); rafraichir();
 }
 function relancer(id) {
+  const aujourdhui = new Date().toLocaleDateString("fr-FR");
   candidatures = candidatures.map(c => c.id === id
-    ? Object.assign({}, c, { relance: true, dateRelance: new Date().toLocaleDateString("fr-FR") })
+    ? Object.assign({}, c, {
+        relance: true,
+        nbRelances: nbRelances(c) + 1,
+        dateDerniereRelance: aujourdhui,
+        dateRelance: aujourdhui
+      })
     : c);
   ecrire("candidatures", candidatures); rafraichir();
 }
@@ -1476,6 +1549,60 @@ function texteEmail(poste, contrat) {
     " au sein de votre entreprise.\n\n" +
     "Dans l'attente de votre retour, je vous prie d'agreer, Madame, Monsieur, mes sinceres salutations.\n\n" +
     "Cordialement,\n" + config.nom;
+}
+
+const RELANCE_DEFAUT =
+  "Madame, Monsieur,\n\n" +
+  "Je me permets de revenir vers vous concernant ma candidature au poste de [poste], " +
+  "adressee le [date].\n\n" +
+  "Toujours vivement motivee a l'idee de rejoindre votre equipe et de mettre mes competences " +
+  "au service de vos missions, je reste pleinement disponible pour echanger avec vous.\n\n" +
+  "Dans l'attente de votre retour, je vous prie d'agreer, Madame, Monsieur, mes sinceres salutations.";
+
+function texteRelance(poste, dateEnvoi) {
+  const modele = (config.texteRelance && config.texteRelance.trim())
+    ? config.texteRelance
+    : RELANCE_DEFAUT;
+  const corps = modele
+    .replace(/\[poste\]/g, poste)
+    .replace(/\[date\]/g, dateEnvoi);
+  return corps + "\n\nCordialement,\n" + config.nom;
+}
+
+// Nombre de jours correspondant a la frequence choisie
+function joursFrequence() {
+  const tables = { "1 semaine": 7, "2 semaines": 14, "3 semaines": 21, "1 mois": 30 };
+  return tables[config.frequenceRelance] || 0;
+}
+
+// Convertit une date "JJ/MM/AAAA" en objet Date
+function parseDateFr(texte) {
+  if (!texte) return null;
+  const m = texte.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+  if (!m) return null;
+  return new Date(Number(m[3]), Number(m[2]) - 1, Number(m[1]));
+}
+
+// Une candidature est a relancer si elle est en attente et que le delai
+// depuis le dernier contact (envoi ou derniere relance) est depasse.
+function relanceDue(c) {
+  if (!config.frequenceRelance || config.frequenceRelance === "aucune") return false;
+  if (c.statut !== "En attente") return false;
+
+  const jours = joursFrequence();
+  if (!jours) return false;
+
+  const dernierContact = c.dateDerniereRelance || c.dateEnvoi;
+  const base = parseDateFr(dernierContact);
+  if (!base) return false;
+
+  const echeance = new Date(base.getTime());
+  echeance.setDate(echeance.getDate() + jours);
+
+  const aujourdhui = new Date();
+  aujourdhui.setHours(0, 0, 0, 0);
+
+  return aujourdhui >= echeance;
 }
 
 // Prepare les pieces jointes une fois, reutilisees pour tous les envois d'un lot
@@ -1532,6 +1659,8 @@ async function envoyerUne(cible, pieces, noms, choixCv, choixLm) {
     dateEnvoi: new Date().toLocaleDateString("fr-FR"),
     statut: "En attente",
     relance: false,
+    nbRelances: 0,
+    dateDerniereRelance: null,
     dateRelance: null,
     pieces: noms,
     apercuOuvert: false,
@@ -1545,6 +1674,114 @@ async function envoyerUne(cible, pieces, noms, choixCv, choixLm) {
 
 function pause(ms) {
   return new Promise(function (r) { setTimeout(r, ms); });
+}
+
+// =======================================================
+//  RELANCES AUTOMATIQUES
+// =======================================================
+function nbRelances(c) {
+  if (typeof c.nbRelances === "number") return c.nbRelances;
+  return c.relance ? 1 : 0; // compatibilite ancien format
+}
+
+// Envoie une relance pour une candidature et met a jour son compteur
+async function envoyerRelance(c) {
+  const reponse = await fetch(config.serveur, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      to: c.email,
+      fromName: config.nom,
+      subject: "Relance - candidature " + c.poste,
+      text: texteRelance(c.poste, c.dateEnvoi)
+    })
+  });
+
+  if (!reponse.ok) {
+    const donnees = await reponse.json().catch(() => ({}));
+    throw new Error("Code " + reponse.status + " — " + (donnees.error || ""));
+  }
+
+  const aujourdhui = new Date().toLocaleDateString("fr-FR");
+  candidatures = candidatures.map(function (x) {
+    if (x.id !== c.id) return x;
+    return Object.assign({}, x, {
+      relance: true,
+      nbRelances: nbRelances(x) + 1,
+      dateDerniereRelance: aujourdhui,
+      dateRelance: aujourdhui
+    });
+  });
+  ecrire("candidatures", candidatures);
+}
+
+// Verifie et envoie les relances a l'ouverture de l'app
+async function traiterRelancesAuto() {
+  if (!config.nom || !config.serveur) return;
+  if (!config.frequenceRelance || config.frequenceRelance === "aucune") return;
+
+  const aRelancer = candidatures.filter(relanceDue);
+  if (aRelancer.length === 0) return;
+
+  afficherMsg("Envoi automatique de " + aRelancer.length + " relance(s) en cours...", "info");
+
+  let reussies = 0;
+  for (let i = 0; i < aRelancer.length; i++) {
+    try {
+      await envoyerRelance(aRelancer[i]);
+      reussies++;
+      rafraichir();
+      majTableauRelances();
+    } catch (err) {
+      // on continue meme si une relance echoue
+    }
+    if (i < aRelancer.length - 1) await pause(2500);
+  }
+
+  if (reussies > 0) {
+    afficherMsg(reussies + " relance(s) envoyee(s) automatiquement.", "ok");
+  }
+}
+
+function majTableauRelances() {
+  const zone = document.getElementById("tableau-relances");
+  if (!zone) return;
+
+  const relancees = candidatures.filter(function (c) { return nbRelances(c) > 0; });
+
+  if (config.frequenceRelance && config.frequenceRelance !== "aucune") {
+    const aVenir = candidatures.filter(relanceDue).length;
+    if (aVenir > 0) {
+      zone.innerHTML = '<div class="msg info" style="margin-bottom:12px">' +
+        aVenir + ' relance(s) seront envoyees a la prochaine ouverture.</div>';
+    } else {
+      zone.innerHTML = "";
+    }
+  } else {
+    zone.innerHTML = "";
+  }
+
+  if (relancees.length === 0) {
+    zone.innerHTML += '<p class="vide">Aucune relance envoyee pour le moment.</p>';
+    return;
+  }
+
+  let html = '<div class="etiquette-fichier" style="margin-bottom:8px">Historique des relances</div>' +
+    '<table class="tab-relances"><thead><tr>' +
+    '<th>Entreprise</th><th>Poste</th><th>Nb</th><th>Derniere</th>' +
+    '</tr></thead><tbody>';
+
+  relancees.forEach(function (c) {
+    html += '<tr>' +
+      '<td>' + c.entreprise + '</td>' +
+      '<td>' + c.poste + '</td>' +
+      '<td style="text-align:center">' + nbRelances(c) + '</td>' +
+      '<td>' + (c.dateDerniereRelance || c.dateRelance || "-") + '</td>' +
+      '</tr>';
+  });
+
+  html += '</tbody></table>';
+  zone.innerHTML += html;
 }
 
 async function envoyer() {
@@ -1770,6 +2007,8 @@ function basculerMode(mode) {
 //  BRANCHEMENTS
 // =======================================================
 document.getElementById("btn-reglages").addEventListener("click", enregistrerConfig);
+document.getElementById("btn-frequence").addEventListener("click", enregistrerFrequence);
+document.getElementById("btn-texte-relance").addEventListener("click", enregistrerTexteRelance);
 document.getElementById("btn-ouvrir-reglages").addEventListener("click", deplierReglages);
 document.getElementById("btn-modele").addEventListener("click", insererModele);
 document.getElementById("btn-envoyer").addEventListener("click", envoyer);
@@ -1830,6 +2069,10 @@ majBoutonModele();
 majIndicateurPages();
 candidatures = lire("candidatures", []);
 rafraichir();
+
+// Relances automatiques : on laisse l'interface s'afficher, puis on traite
+setTimeout(function () { traiterRelancesAuto(); }, 1200);
+
 </script>
 </body>
 </html>
