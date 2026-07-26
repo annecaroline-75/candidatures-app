@@ -21,6 +21,30 @@
   }
   .wrap { max-width: 860px; margin: 0 auto; }
 
+  .menu-pages {
+    display: flex; gap: 6px; margin-bottom: 18px;
+    background: #eef2f7; padding: 5px; border-radius: 12px;
+    position: sticky; top: 8px; z-index: 10;
+  }
+  .onglet-page {
+    flex: 1; padding: 11px 8px; border: none; cursor: pointer;
+    background: transparent; color: #475569;
+    font-size: 14px; font-weight: 600; border-radius: 8px;
+    font-family: inherit; transition: background 0.15s;
+  }
+  .onglet-page.actif { background: #fff; color: #1e3a8a; box-shadow: 0 1px 3px rgba(0,0,0,0.08); }
+  .page.cache { display: none; }
+  .rang-note {
+    display: flex; align-items: center; gap: 10px;
+    border: 1px solid #e2e8f0; border-radius: 10px;
+    padding: 13px 15px; margin-bottom: 8px; cursor: pointer;
+    transition: background 0.15s;
+  }
+  .rang-note:hover { background: #f8fafc; }
+  .rang-note .note-titre { flex: 1; font-weight: 600; color: #0f172a; font-size: 15px; }
+  .rang-note .note-date { font-size: 12px; color: #94a3b8; white-space: nowrap; }
+  .note-vide { color: #94a3b8; padding: 8px 0 4px; font-size: 14px; }
+
   h1 { font-size: 25px; margin: 0 0 2px; letter-spacing: -0.5px; }
   .sub { color: #64748b; margin: 0 0 20px; font-size: 14px; }
 
@@ -252,7 +276,7 @@
 <div class="wrap">
 
   <h1>Suivi des candidatures</h1>
-  <p class="sub">Documents, envoi avec pieces jointes, historique</p>
+  <p class="sub">Candidatures, relances automatiques et notes</p>
 
   <div id="zone-msg"></div>
   <div id="zone-debug"></div>
@@ -274,6 +298,16 @@
   </div>
 
   <button class="lien cache" id="btn-ouvrir-reglages">Modifier mes reglages</button>
+
+  <!-- ================= MENU ================= -->
+  <div class="menu-pages">
+    <button class="onglet-page actif" data-page="envoi">Documents &amp; envoi</button>
+    <button class="onglet-page" data-page="suivi">Suivi &amp; relances</button>
+    <button class="onglet-page" data-page="notes">Notes</button>
+  </div>
+
+  <!-- ================= PAGE ENVOI ================= -->
+  <div class="page" id="page-envoi">
 
   <!-- ================= DOCUMENTS ================= -->
   <div class="carte">
@@ -388,6 +422,19 @@
     <div id="progression-masse" class="cache"></div>
   </div>
 
+  </div><!-- fin page-envoi -->
+
+  <!-- ================= PAGE SUIVI ================= -->
+  <div class="page cache" id="page-suivi">
+
+  <!-- ================= STATS + HISTORIQUE ================= -->
+  <div class="stats" id="stats"></div>
+
+  <div class="carte">
+    <h2>Mes candidatures</h2>
+    <div id="liste"></div>
+  </div>
+
   <!-- ================= RELANCES ================= -->
   <div class="carte">
     <h2>Relances automatiques</h2>
@@ -415,20 +462,39 @@
     <textarea id="texte-relance" style="min-height:200px"></textarea>
     <button class="secondaire" id="btn-texte-relance">Enregistrer le texte de relance</button>
 
-    <button class="lien" id="btn-test-relance" style="margin-top:6px;display:block;background:#fef3c7;color:#78350f;padding:10px 16px;font-weight:600;font-size:13px;text-decoration:none;border-radius:8px">
-      TEST : relancer maintenant toutes les candidatures en attente
-    </button>
-
     <div id="tableau-relances" style="margin-top:18px"></div>
   </div>
 
-  <!-- ================= STATS + HISTORIQUE ================= -->
-  <div class="stats" id="stats"></div>
+  </div><!-- fin page-suivi -->
 
+  <!-- ================= PAGE NOTES ================= -->
+  <div class="page cache" id="page-notes">
   <div class="carte">
-    <h2>Mes candidatures</h2>
-    <div id="liste"></div>
+    <h2>Mes notes</h2>
+    <p class="aide">
+      Cree une note par entretien ou par sujet. Enregistrement automatique.
+      <span class="etat-sauvegarde" id="etat-notes"></span>
+    </p>
+
+    <!-- Liste des notes -->
+    <div id="liste-notes"></div>
+    <button class="secondaire" id="btn-nouvelle-note" style="margin-top:8px">+ Nouvelle note</button>
+
+    <!-- Editeur d'une note -->
+    <div id="editeur-note" class="cache" style="margin-top:16px">
+      <label for="titre-note">Titre</label>
+      <input type="text" id="titre-note" placeholder="Ex : Entretien Mission Locale de...">
+
+      <label for="contenu-note" style="margin-top:10px">Contenu</label>
+      <textarea id="contenu-note" style="min-height:280px" placeholder="Tes idees, questions a poser, remarques..."></textarea>
+
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px">
+        <button class="secondaire" id="btn-fermer-note" style="flex:1">Retour a la liste</button>
+        <button class="lien" id="btn-supprimer-note" style="flex:none;background:#fee2e2;color:#991b1b;padding:12px 16px;font-weight:600;font-size:15px;text-decoration:none;border-radius:8px">Supprimer</button>
+      </div>
+    </div>
   </div>
+  </div><!-- fin page-notes -->
 
 </div>
 
@@ -660,34 +726,6 @@ function enregistrerFrequence() {
     afficherMsg("Frequence enregistree : " + config.frequenceRelance + ".", "ok");
   }
 }
-// TEST : force une relance sur toutes les candidatures en attente,
-// sans tenir compte du delai. A retirer une fois les tests termines.
-async function testerRelances() {
-  if (!config.nom || !config.serveur) {
-    afficherMsg("Renseigne d'abord tes reglages.", "info");
-    return;
-  }
-  const enAttente = candidatures.filter(function (c) { return c.statut === "En attente"; });
-  if (enAttente.length === 0) {
-    afficherMsg("Aucune candidature en attente a relancer.", "info");
-    return;
-  }
-
-  afficherMsg("TEST : envoi de " + enAttente.length + " relance(s)...", "info");
-  let ok = 0;
-  for (let i = 0; i < enAttente.length; i++) {
-    try {
-      await envoyerRelance(enAttente[i]);
-      ok++;
-      rafraichir();
-    } catch (err) {
-      afficherDebug(String(err && err.message ? err.message : err));
-    }
-    if (i < enAttente.length - 1) await pause(2500);
-  }
-  afficherMsg("TEST termine : " + ok + " relance(s) envoyee(s). Verifie ta boite mail et le compteur.", "ok");
-}
-
 function enregistrerTexteRelance() {
   const txt = document.getElementById("texte-relance").value.trim();
   if (!txt) {
@@ -1709,6 +1747,119 @@ function pause(ms) {
 }
 
 // =======================================================
+//  NAVIGATION ENTRE PAGES
+// =======================================================
+function afficherPage(nom) {
+  ["envoi", "suivi", "notes"].forEach(function (p) {
+    document.getElementById("page-" + p).classList.toggle("cache", p !== nom);
+  });
+  document.querySelectorAll("[data-page]").forEach(function (b) {
+    b.classList.toggle("actif", b.dataset.page === nom);
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+// =======================================================
+//  CARNET DE NOTES
+// =======================================================
+let notes = [];
+let noteActive = null;
+let minuteurNotes = null;
+
+function chargerNotes() {
+  notes = lire("notes", []);
+  // Migration : un ancien bloc-notes unique devient une premiere note
+  const ancien = lire("blocNotes", "");
+  if (ancien && ancien.trim() && notes.length === 0) {
+    notes.push({ id: Date.now(), titre: "Note", contenu: ancien, date: new Date().toLocaleDateString("fr-FR") });
+    ecrire("notes", notes);
+    localStorage.removeItem("blocNotes");
+  }
+  dessinerListeNotes();
+}
+
+function dessinerListeNotes() {
+  const zone = document.getElementById("liste-notes");
+  if (!zone) return;
+
+  if (notes.length === 0) {
+    zone.innerHTML = '<p class="note-vide">Aucune note pour le moment. Cree ta premiere note ci-dessous.</p>';
+    return;
+  }
+
+  zone.innerHTML = notes.map(function (n) {
+    const titre = (n.titre && n.titre.trim()) ? n.titre : "Sans titre";
+    return '<div class="rang-note" onclick="ouvrirNote(' + n.id + ')">' +
+      '<span class="note-titre">' + echapper(titre) + '</span>' +
+      '<span class="note-date">' + (n.date || "") + '</span>' +
+      '</div>';
+  }).join("");
+}
+
+function nouvelleNote() {
+  const note = { id: Date.now(), titre: "", contenu: "", date: new Date().toLocaleDateString("fr-FR") };
+  notes.unshift(note);
+  ecrire("notes", notes);
+  ouvrirNote(note.id);
+}
+
+function ouvrirNote(id) {
+  noteActive = id;
+  const note = notes.find(function (n) { return n.id === id; });
+  if (!note) return;
+  document.getElementById("titre-note").value = note.titre || "";
+  document.getElementById("contenu-note").value = note.contenu || "";
+  document.getElementById("liste-notes").classList.add("cache");
+  document.getElementById("btn-nouvelle-note").classList.add("cache");
+  document.getElementById("editeur-note").classList.remove("cache");
+}
+
+function fermerNote() {
+  noteActive = null;
+  document.getElementById("editeur-note").classList.add("cache");
+  document.getElementById("liste-notes").classList.remove("cache");
+  document.getElementById("btn-nouvelle-note").classList.remove("cache");
+  dessinerListeNotes();
+}
+
+function sauverNoteActive() {
+  if (noteActive === null) return;
+  notes = notes.map(function (n) {
+    if (n.id !== noteActive) return n;
+    return Object.assign({}, n, {
+      titre: document.getElementById("titre-note").value,
+      contenu: document.getElementById("contenu-note").value,
+      date: new Date().toLocaleDateString("fr-FR")
+    });
+  });
+  ecrire("notes", notes);
+
+  const etat = document.getElementById("etat-notes");
+  if (etat) {
+    etat.textContent = "Enregistre";
+    clearTimeout(minuteurNotes);
+    minuteurNotes = setTimeout(function () { etat.textContent = ""; }, 2000);
+  }
+}
+
+let minuteurFrappeNotes = null;
+function notesAuto() {
+  clearTimeout(minuteurFrappeNotes);
+  const etat = document.getElementById("etat-notes");
+  if (etat) etat.textContent = "...";
+  minuteurFrappeNotes = setTimeout(sauverNoteActive, 700);
+}
+
+function supprimerNoteActive() {
+  if (noteActive === null) return;
+  const confirme = window.confirm("Supprimer definitivement cette note ?");
+  if (!confirme) return;
+  notes = notes.filter(function (n) { return n.id !== noteActive; });
+  ecrire("notes", notes);
+  fermerNote();
+}
+
+// =======================================================
 //  RELANCES AUTOMATIQUES
 // =======================================================
 function nbRelances(c) {
@@ -2041,7 +2192,14 @@ function basculerMode(mode) {
 document.getElementById("btn-reglages").addEventListener("click", enregistrerConfig);
 document.getElementById("btn-frequence").addEventListener("click", enregistrerFrequence);
 document.getElementById("btn-texte-relance").addEventListener("click", enregistrerTexteRelance);
-document.getElementById("btn-test-relance").addEventListener("click", testerRelances);
+document.getElementById("btn-nouvelle-note").addEventListener("click", nouvelleNote);
+document.getElementById("btn-fermer-note").addEventListener("click", fermerNote);
+document.getElementById("btn-supprimer-note").addEventListener("click", supprimerNoteActive);
+document.getElementById("titre-note").addEventListener("input", notesAuto);
+document.getElementById("contenu-note").addEventListener("input", notesAuto);
+document.querySelectorAll("[data-page]").forEach(function (b) {
+  b.addEventListener("click", function () { afficherPage(this.dataset.page); });
+});
 document.getElementById("btn-ouvrir-reglages").addEventListener("click", deplierReglages);
 document.getElementById("btn-modele").addEventListener("click", insererModele);
 document.getElementById("btn-envoyer").addEventListener("click", envoyer);
@@ -2098,6 +2256,7 @@ document.querySelectorAll("[data-md]").forEach(b => {
 chargerConfig();
 chargerDocuments();
 chargerFichiersOrigine();
+chargerNotes();
 majBoutonModele();
 majIndicateurPages();
 candidatures = lire("candidatures", []);
