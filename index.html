@@ -533,6 +533,16 @@
 
     <div id="liste-entretiens" style="margin-top:20px"></div>
   </div>
+
+  <div class="carte">
+    <h2>Texte du mail de remerciement</h2>
+    <p class="aide">
+      Envoye apres un entretien, d'un bouton sur sa fiche. Ecris [poste] la ou il doit apparaitre.
+      La signature "ton nom" est ajoutee a la fin.
+    </p>
+    <textarea id="texte-remerciement" style="min-height:220px"></textarea>
+    <button class="secondaire" id="btn-texte-remerciement">Enregistrer le texte de remerciement</button>
+  </div>
   </div><!-- fin page-entretiens -->
 
   <!-- ================= PAGE NOTES ================= -->
@@ -770,11 +780,13 @@ function deplierReglages() {
 function enregistrerConfig() {
   const freq = config.frequenceRelance || "aucune";
   const txtRelance = config.texteRelance || "";
+  const txtRemerciement = config.texteRemerciement || "";
   config = {
     nom: document.getElementById("r-nom").value.trim(),
     serveur: document.getElementById("r-serveur").value.trim(),
     frequenceRelance: freq,
-    texteRelance: txtRelance
+    texteRelance: txtRelance,
+    texteRemerciement: txtRemerciement
   };
   if (!config.nom || !config.serveur) {
     afficherMsg("Renseigne ton nom et l'adresse du serveur.", "info");
@@ -1833,6 +1845,8 @@ let entretiens = [];
 
 function chargerEntretiens() {
   entretiens = lire("entretiens", []);
+  const champ = document.getElementById("texte-remerciement");
+  if (champ) champ.value = config.texteRemerciement || REMERCIEMENT_DEFAUT;
   dessinerEntretiens();
 }
 
@@ -1848,6 +1862,86 @@ function preremplirEntretien(idCandidature) {
   document.getElementById("ent-lieu").value = "";
   document.getElementById("ent-date").focus();
   afficherMsg("Entreprise et poste pre-remplis. Ajoute la date et l'heure.", "info");
+}
+
+const REMERCIEMENT_DEFAUT =
+  "Madame, Monsieur,\n\n" +
+  "Je vous remercie sincerement pour le temps que vous m'avez accorde lors de notre entretien " +
+  "pour le poste de [poste]. J'ai beaucoup apprecie cet echange, qui m'a permis de mieux decouvrir " +
+  "votre equipe et vos missions.\n\n" +
+  "Ce poste correspond pleinement a mon projet professionnel, et notre discussion n'a fait que " +
+  "renforcer mon envie de vous rejoindre et de m'investir a vos cotes.\n\n" +
+  "Je reste a votre disposition pour tout complement d'information et espere avoir l'occasion " +
+  "de poursuivre nos echanges.\n\n" +
+  "Bien cordialement,";
+
+function texteRemerciement(poste) {
+  const modele = (config.texteRemerciement && config.texteRemerciement.trim())
+    ? config.texteRemerciement
+    : REMERCIEMENT_DEFAUT;
+  return modele.replace(/\[poste\]/g, poste) + "\n" + config.nom;
+}
+
+function enregistrerTexteRemerciement() {
+  const txt = document.getElementById("texte-remerciement").value.trim();
+  if (!txt) {
+    afficherMsg("Le texte de remerciement ne peut pas etre vide.", "info");
+    return;
+  }
+  config.texteRemerciement = txt;
+  ecrire("config", config);
+  afficherMsg("Texte de remerciement enregistre.", "ok");
+}
+
+// Cherche l'email de la candidature liee (meme entreprise + poste)
+function emailPourEntretien(e) {
+  const c = candidatures.find(function (x) {
+    return x.entreprise === e.entreprise && (!e.poste || x.poste === e.poste);
+  });
+  return c ? c.email : "";
+}
+
+async function envoyerRemerciement(id) {
+  const e = entretiens.find(function (x) { return x.id === id; });
+  if (!e) return;
+
+  if (!config.nom || !config.serveur) {
+    afficherMsg("Renseigne d'abord tes reglages.", "info");
+    return;
+  }
+
+  let email = emailPourEntretien(e);
+  if (!email) {
+    email = window.prompt("Adresse email du destinataire du remerciement :", "");
+    if (!email) return;
+  }
+
+  afficherMsg("Envoi du remerciement...", "info");
+  try {
+    const reponse = await fetch(config.serveur, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        to: email,
+        fromName: config.nom,
+        subject: "Remerciements - entretien " + (e.poste || e.entreprise),
+        text: texteRemerciement(e.poste || "")
+      })
+    });
+    if (!reponse.ok) {
+      const d = await reponse.json().catch(() => ({}));
+      throw new Error("Code " + reponse.status + " — " + (d.error || ""));
+    }
+    entretiens = entretiens.map(function (x) {
+      return x.id === id ? Object.assign({}, x, { remercie: true }) : x;
+    });
+    ecrire("entretiens", entretiens);
+    dessinerEntretiens();
+    afficherMsg("Mail de remerciement envoye a " + e.entreprise + ".", "ok");
+  } catch (err) {
+    afficherMsg("Echec de l'envoi du remerciement.", "ko");
+    afficherDebug(String(err && err.message ? err.message : err));
+  }
 }
 
 function ajouterEntretien() {
@@ -1914,12 +2008,21 @@ function dessinerEntretiens() {
     const titre = e.poste ? (e.poste + " — " + e.entreprise) : e.entreprise;
     const lieu = e.lieu ? '<div class="ent-lieu">' + echapper(e.lieu) + '</div>' : "";
 
+    // Le remerciement n'apparait qu'une fois l'entretien passe
+    let btnRemerciement = "";
+    if (passe) {
+      btnRemerciement = e.remercie
+        ? '<span class="badge positive" style="align-self:center">Remerciement envoye</span>'
+        : '<button class="ent-agenda" onclick="envoyerRemerciement(' + e.id + ')">Envoyer un remerciement</button>';
+    }
+
     return '<div class="' + classe + '">' +
       '<div class="ent-quand">' + dateLisible + ' a ' + e.heure + badgeJour + '</div>' +
       '<div class="ent-titre">' + echapper(titre) + '</div>' +
       lieu +
       '<div class="ent-actions">' +
         '<button class="ent-agenda" onclick="ajouterAgenda(' + e.id + ')">Ajouter a mon agenda</button>' +
+        btnRemerciement +
         '<button class="ent-suppr" onclick="supprimerEntretien(' + e.id + ')">Supprimer</button>' +
       '</div>' +
     '</div>';
@@ -2426,6 +2529,7 @@ document.getElementById("btn-frequence").addEventListener("click", enregistrerFr
 document.getElementById("btn-texte-relance").addEventListener("click", enregistrerTexteRelance);
 document.getElementById("btn-nouvelle-note").addEventListener("click", nouvelleNote);
 document.getElementById("btn-ajouter-entretien").addEventListener("click", ajouterEntretien);
+document.getElementById("btn-texte-remerciement").addEventListener("click", enregistrerTexteRemerciement);
 document.getElementById("btn-fermer-note").addEventListener("click", fermerNote);
 document.getElementById("btn-supprimer-note").addEventListener("click", supprimerNoteActive);
 document.getElementById("titre-note").addEventListener("input", notesAuto);
