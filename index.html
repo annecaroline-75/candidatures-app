@@ -134,6 +134,35 @@
     font-size: 12px; font-weight: 600; align-self: center;
     padding: 4px 10px; border-radius: 999px; margin-left: 6px;
   }
+  .ligne-masse {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto auto;
+    gap: 8px; margin-bottom: 8px; align-items: center;
+  }
+  .ligne-masse input, .ligne-masse select { margin: 0; }
+  .ligne-masse .retirer {
+    padding: 8px 11px; background: #fee2e2; color: #991b1b;
+    border: none; border-radius: 8px; font-size: 13px; cursor: pointer;
+  }
+  @media (max-width: 620px) {
+    .ligne-masse { grid-template-columns: 1fr 1fr; }
+    .ligne-masse .retirer { grid-column: 2; justify-self: end; }
+  }
+  #progression-masse {
+    margin-top: 14px; padding: 14px;
+    background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px;
+  }
+  .barre-fond {
+    background: #e2e8f0; border-radius: 999px; height: 10px; overflow: hidden; margin-bottom: 10px;
+  }
+  .barre-remplie {
+    background: #2563eb; height: 100%; width: 0; transition: width 0.3s;
+  }
+  .journal-masse { font-size: 13px; }
+  .journal-masse div { padding: 3px 0; }
+  .journal-ok { color: #166534; }
+  .journal-ko { color: #991b1b; }
+  .journal-attente { color: #64748b; }
   .page-ok { background: #dcfce7; color: #166534; }
   .page-trop { background: #fef3c7; color: #78350f; }
   .rang-origine {
@@ -273,6 +302,7 @@
         <button data-md="soustitre">Sous-titre</button>
         <button data-md="gras">Gras</button>
         <button data-md="italique">Italique</button>
+        <button data-md="centrer">Centrer</button>
         <button data-md="liste">Liste</button>
         <button data-md="ligne">Separateur</button>
       </div>
@@ -289,38 +319,63 @@
   <!-- ================= CANDIDATURE ================= -->
   <div class="carte">
     <h2>Nouvelle candidature</h2>
-    <div class="grille">
-      <div>
-        <label for="entreprise">Entreprise</label>
-        <input type="text" id="entreprise" placeholder="Mission Locale de...">
-      </div>
-      <div>
-        <label for="poste">Poste</label>
-        <input type="text" id="poste" placeholder="Conseillere en insertion">
-      </div>
-      <div>
-        <label for="contrat">Type de contrat</label>
-        <select id="contrat">
-          <option>CDI temps plein</option>
-          <option>CDI temps partiel</option>
-          <option>CDD temps plein</option>
-          <option>CDD temps partiel</option>
-          <option>Stage</option>
-        </select>
-      </div>
-      <div>
-        <label for="email">Email du destinataire</label>
-        <input type="email" id="email" placeholder="rh@entreprise.fr">
+
+    <div class="onglets">
+      <button class="onglet actif" data-mode="perso">Une entreprise</button>
+      <button class="onglet" data-mode="masse">Plusieurs entreprises</button>
+    </div>
+
+    <!-- MODE PERSONNALISE -->
+    <div id="mode-perso">
+      <div class="grille">
+        <div>
+          <label for="entreprise">Entreprise</label>
+          <input type="text" id="entreprise" placeholder="Mission Locale de...">
+        </div>
+        <div>
+          <label for="poste">Poste</label>
+          <input type="text" id="poste" placeholder="Conseillere en insertion">
+        </div>
+        <div>
+          <label for="contrat">Type de contrat</label>
+          <select id="contrat">
+            <option>CDI temps plein</option>
+            <option>CDI temps partiel</option>
+            <option>CDD temps plein</option>
+            <option>CDD temps partiel</option>
+            <option>Stage</option>
+          </select>
+        </div>
+        <div>
+          <label for="email">Email du destinataire</label>
+          <input type="email" id="email" placeholder="rh@entreprise.fr">
+        </div>
       </div>
     </div>
 
-    <label>Quel CV envoyer</label>
+    <!-- MODE MASSE -->
+    <div id="mode-masse" class="cache">
+      <p class="aide">
+        Ajoute une ligne par entreprise. Chaque email reprend ton modele,
+        adapte au poste indique. Les envois se font l'un apres l'autre :
+        garde l'app ouverte jusqu'a la fin.
+      </p>
+      <div id="lignes-masse"></div>
+      <button class="lien" id="btn-ajouter-ligne" style="background:#f1f5f9;color:#334155;padding:10px 16px;font-weight:600;font-size:14px;text-decoration:none;border-radius:8px">
+        + Ajouter une entreprise
+      </button>
+    </div>
+
+    <label style="margin-top:16px">Quel CV envoyer</label>
     <div class="bascule" id="bascule-cv"></div>
 
     <label style="margin-top:14px">Quelle lettre envoyer</label>
     <div class="bascule" id="bascule-lm"></div>
 
     <button class="principal" id="btn-envoyer">Envoyer ma candidature</button>
+    <button class="principal cache" id="btn-envoyer-masse">Envoyer toutes les candidatures</button>
+
+    <div id="progression-masse" class="cache"></div>
   </div>
 
   <!-- ================= STATS + HISTORIQUE ================= -->
@@ -558,9 +613,22 @@ function afficherDoc() {
   majApercu();
 }
 
+// Convertit ->texte<- en ligne centree, puis applique marked
+function rendreMarkdown(texte) {
+  if (!texte) return marked.parse("*Rien a afficher pour le moment.*");
+  const lignes = texte.split("\n").map(function (ligne) {
+    const m = ligne.match(/^\s*->(.+?)<-\s*$/);
+    if (m) {
+      return '<div style="text-align:center">' + marked.parseInline(m[1]) + "</div>";
+    }
+    return ligne;
+  });
+  return marked.parse(lignes.join("\n"));
+}
+
 function majApercu() {
   const texte = document.getElementById("editeur").value;
-  document.getElementById("apercu").innerHTML = marked.parse(texte || "*Rien a afficher pour le moment.*");
+  document.getElementById("apercu").innerHTML = rendreMarkdown(texte);
 }
 
 let minuteurSauvegarde = null;
@@ -637,6 +705,7 @@ function insererMarkdown(type) {
     soustitre: ["## ", selection || "Sous-titre", ""],
     gras:      ["**", selection || "texte", "**"],
     italique:  ["*", selection || "texte", "*"],
+    centrer:   ["->", selection || "texte", "<-"],
     liste:     ["- ", selection || "element", ""],
     ligne:     ["\n---\n", "", ""]
   };
@@ -1128,7 +1197,7 @@ function construireDocument(markdown) {
         }
       }
 
-      function ecrireLigne(texteBrut, taille, grasImpose, decalageGauche, interligne, avant, couleur) {
+      function ecrireLigne(texteBrut, taille, grasImpose, decalageGauche, interligne, avant, couleur, centre) {
         y += avant || 0;
         doc.setFontSize(taille);
         if (couleur) { doc.setTextColor(couleur[0], couleur[1], couleur[2]); }
@@ -1153,10 +1222,23 @@ function construireDocument(markdown) {
         let ligneEnCours = [];
         let largeurEnCours = 0;
 
+        function largeurDe(liste) {
+          let l = 0;
+          liste.forEach(function (mot) {
+            doc.setFont("helvetica", styleHelvetica(mot.gras, mot.italique));
+            l += doc.getTextWidth(mot.texte);
+          });
+          return l;
+        }
+
         function poserLigne() {
           if (!ligneEnCours.length) return;
           nouvellePageSiNecessaire(interligne);
           let x = depart;
+          if (centre) {
+            const l = largeurDe(ligneEnCours);
+            x = margeGauche + (largeurTexte - l) / 2;
+          }
           ligneEnCours.forEach(function (mot) {
             doc.setFont("helvetica", styleHelvetica(mot.gras, mot.italique));
             doc.text(mot.texte, x, y);
@@ -1189,6 +1271,14 @@ function construireDocument(markdown) {
         const ligne = ligneBrute.trim();
 
         if (ligne === "") { y += 5; precedenteEtaitPuce = false; return; }
+
+        // Ligne centree : ->texte<-
+        const centreMatch = ligne.match(/^->(.+?)<-$/);
+        if (centreMatch) {
+          ecrireLigne(centreMatch[1].trim(), 11, false, 0, 5.8, 2.2, null, true);
+          precedenteEtaitPuce = false;
+          return;
+        }
 
         if (/^---+$/.test(ligne)) {
           nouvellePageSiNecessaire(6);
@@ -1322,12 +1412,12 @@ function majListe() {
       if (c.snapshotCv) {
         blocs += '<div class="apercu-hist-bloc">' +
           '<div class="apercu-hist-titre">CV joint</div>' +
-          '<div class="apercu-hist-doc">' + marked.parse(c.snapshotCv) + '</div></div>';
+          '<div class="apercu-hist-doc">' + rendreMarkdown(c.snapshotCv) + '</div></div>';
       }
       if (c.snapshotLm) {
         blocs += '<div class="apercu-hist-bloc">' +
           '<div class="apercu-hist-titre">Lettre de motivation jointe</div>' +
-          '<div class="apercu-hist-doc">' + marked.parse(c.snapshotLm) + '</div></div>';
+          '<div class="apercu-hist-doc">' + rendreMarkdown(c.snapshotLm) + '</div></div>';
       }
       panneauApercu = '<div class="apercu-hist">' + blocs + '</div>';
     }
@@ -1388,6 +1478,75 @@ function texteEmail(poste, contrat) {
     "Cordialement,\n" + config.nom;
 }
 
+// Prepare les pieces jointes une fois, reutilisees pour tous les envois d'un lot
+async function preparerPieces(choixCv, choixLm) {
+  const pieces = [];
+  const noms = [];
+
+  if (choixCv === "original" && fichiersOrigine.cv) {
+    pieces.push({ filename: fichiersOrigine.cv.nom, content: fichiersOrigine.cv.base64 });
+    noms.push("CV");
+  } else if (choixCv === "editeur") {
+    const base64 = await genererPdf(documents.cv, "CV.pdf");
+    pieces.push({ filename: "CV - " + config.nom + ".pdf", content: base64 });
+    noms.push("CV");
+  }
+
+  if (choixLm === "original" && fichiersOrigine.lm) {
+    pieces.push({ filename: fichiersOrigine.lm.nom, content: fichiersOrigine.lm.base64 });
+    noms.push("LM");
+  } else if (choixLm === "editeur") {
+    const base64 = await genererPdf(documents.lm, "LM.pdf");
+    pieces.push({ filename: "Lettre de motivation - " + config.nom + ".pdf", content: base64 });
+    noms.push("LM");
+  }
+
+  return { pieces: pieces, noms: noms };
+}
+
+// Envoie une candidature et l'enregistre. Renvoie true si reussi.
+async function envoyerUne(cible, pieces, noms, choixCv, choixLm) {
+  const reponse = await fetch(config.serveur, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      to: cible.email,
+      fromName: config.nom,
+      subject: "Candidature - " + cible.poste,
+      text: texteEmail(cible.poste, cible.contrat),
+      attachments: pieces
+    })
+  });
+
+  if (!reponse.ok) {
+    const donnees = await reponse.json().catch(() => ({}));
+    throw new Error("Code " + reponse.status + " — " + (donnees.error || ""));
+  }
+
+  candidatures.unshift({
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    entreprise: cible.entreprise,
+    poste: cible.poste,
+    contrat: cible.contrat,
+    email: cible.email,
+    dateEnvoi: new Date().toLocaleDateString("fr-FR"),
+    statut: "En attente",
+    relance: false,
+    dateRelance: null,
+    pieces: noms,
+    apercuOuvert: false,
+    snapshotMail: texteEmail(cible.poste, cible.contrat),
+    snapshotCv: choixCv === "editeur" ? documents.cv : "",
+    snapshotLm: choixLm === "editeur" ? documents.lm : ""
+  });
+  ecrire("candidatures", candidatures);
+  return true;
+}
+
+function pause(ms) {
+  return new Promise(function (r) { setTimeout(r, ms); });
+}
+
 async function envoyer() {
   afficherDebug("");
 
@@ -1423,81 +1582,19 @@ async function envoyer() {
   bouton.disabled = true;
 
   try {
-    const pieces = [];
-    const nomsPieces = [];
-
-    // --- CV ---
-    if (choixCv === "original" && fichiersOrigine.cv) {
-      pieces.push({
-        filename: fichiersOrigine.cv.nom,
-        content: fichiersOrigine.cv.base64
-      });
-      nomsPieces.push("CV");
-    } else if (choixCv === "editeur") {
-      bouton.textContent = "Creation du PDF du CV...";
-      afficherMsg("Creation du PDF du CV...", "info");
-      const base64 = await genererPdf(documents.cv, "CV.pdf");
-      pieces.push({ filename: "CV - " + config.nom + ".pdf", content: base64 });
-      nomsPieces.push("CV");
-    }
-
-    // --- Lettre de motivation ---
-    if (choixLm === "original" && fichiersOrigine.lm) {
-      pieces.push({
-        filename: fichiersOrigine.lm.nom,
-        content: fichiersOrigine.lm.base64
-      });
-      nomsPieces.push("LM");
-    } else if (choixLm === "editeur") {
-      bouton.textContent = "Creation du PDF de la lettre...";
-      afficherMsg("Creation du PDF de la lettre...", "info");
-      const base64 = await genererPdf(documents.lm, "LM.pdf");
-      pieces.push({ filename: "Lettre de motivation - " + config.nom + ".pdf", content: base64 });
-      nomsPieces.push("LM");
-    }
+    bouton.textContent = "Preparation...";
+    afficherMsg("Preparation de la candidature...", "info");
+    const prep = await preparerPieces(choixCv, choixLm);
 
     bouton.textContent = "Envoi en cours...";
     afficherMsg("Envoi en cours...", "info");
 
-    const reponse = await fetch(config.serveur, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        to: email,
-        fromName: config.nom,
-        subject: "Candidature - " + poste,
-        text: texteEmail(poste, contrat),
-        attachments: pieces
-      })
-    });
+    await envoyerUne(
+      { entreprise: entreprise, poste: poste, contrat: contrat, email: email },
+      prep.pieces, prep.noms, choixCv, choixLm
+    );
 
-    const donnees = await reponse.json().catch(() => ({}));
-
-    if (!reponse.ok) {
-      afficherMsg("Echec de l'envoi.", "ko");
-      afficherDebug("Code " + reponse.status + " — " + (donnees.error || JSON.stringify(donnees)));
-      return;
-    }
-
-    candidatures.unshift({
-      id: Date.now(),
-      entreprise: entreprise,
-      poste: poste,
-      contrat: contrat,
-      email: email,
-      dateEnvoi: new Date().toLocaleDateString("fr-FR"),
-      statut: "En attente",
-      relance: false,
-      dateRelance: null,
-      pieces: nomsPieces,
-      apercuOuvert: false,
-      snapshotMail: texteEmail(poste, contrat),
-      snapshotCv: choixCv === "editeur" ? documents.cv : "",
-      snapshotLm: choixLm === "editeur" ? documents.lm : ""
-    });
-    ecrire("candidatures", candidatures);
     rafraichir();
-
     document.getElementById("entreprise").value = "";
     document.getElementById("poste").value = "";
     document.getElementById("email").value = "";
@@ -1505,11 +1602,168 @@ async function envoyer() {
     afficherMsg("Candidature envoyee a " + entreprise + " et enregistree.", "ok");
   } catch (err) {
     afficherMsg("Echec de l'envoi.", "ko");
-    afficherDebug(String(err));
+    afficherDebug(String(err && err.message ? err.message : err));
   } finally {
     bouton.disabled = false;
     bouton.textContent = "Envoyer ma candidature";
   }
+}
+
+// =======================================================
+//  ENVOI DE MASSE
+// =======================================================
+let lignesMasse = [];
+
+function ajouterLigneMasse(donnees) {
+  lignesMasse.push(Object.assign({
+    id: Date.now() + Math.floor(Math.random() * 10000),
+    entreprise: "", poste: "", contrat: "CDI temps plein", email: ""
+  }, donnees || {}));
+  dessinerLignesMasse();
+}
+
+function retirerLigneMasse(id) {
+  lignesMasse = lignesMasse.filter(function (l) { return l.id !== id; });
+  dessinerLignesMasse();
+}
+
+function majChampMasse(id, champ, valeur) {
+  const ligne = lignesMasse.find(function (l) { return l.id === id; });
+  if (ligne) ligne[champ] = valeur;
+}
+
+function dessinerLignesMasse() {
+  const zone = document.getElementById("lignes-masse");
+  const contrats = ["CDI temps plein", "CDI temps partiel", "CDD temps plein", "CDD temps partiel", "Stage"];
+
+  zone.innerHTML = lignesMasse.map(function (l) {
+    const options = contrats.map(function (c) {
+      return '<option' + (c === l.contrat ? ' selected' : '') + '>' + c + '</option>';
+    }).join("");
+
+    return '<div class="ligne-masse">' +
+      '<input type="text" placeholder="Entreprise" value="' + (l.entreprise || "").replace(/"/g, "&quot;") +
+        '" oninput="majChampMasse(' + l.id + ',\'entreprise\',this.value)">' +
+      '<input type="text" placeholder="Poste" value="' + (l.poste || "").replace(/"/g, "&quot;") +
+        '" oninput="majChampMasse(' + l.id + ',\'poste\',this.value)">' +
+      '<select onchange="majChampMasse(' + l.id + ',\'contrat\',this.value)">' + options + '</select>' +
+      '<button class="retirer" onclick="retirerLigneMasse(' + l.id + ')">X</button>' +
+      '<input type="email" placeholder="Email du destinataire" style="grid-column:1/-1" value="' +
+        (l.email || "").replace(/"/g, "&quot;") +
+        '" oninput="majChampMasse(' + l.id + ',\'email\',this.value)">' +
+      '</div>';
+  }).join("");
+}
+
+async function envoyerMasse() {
+  afficherDebug("");
+
+  if (!config.nom || !config.serveur) {
+    afficherMsg("Renseigne d'abord tes reglages.", "info");
+    deplierReglages();
+    return;
+  }
+
+  const valides = lignesMasse.filter(function (l) {
+    return l.entreprise.trim() && l.poste.trim() && l.email.trim();
+  });
+
+  if (valides.length === 0) {
+    afficherMsg("Ajoute au moins une entreprise complete (entreprise, poste, email).", "info");
+    return;
+  }
+
+  const choixCv = choixEnvoi.cv;
+  const choixLm = choixEnvoi.lm;
+
+  if (choixCv === "editeur" && !documents.cv.trim()) {
+    afficherMsg("Ton CV est vide dans l'editeur. Choisis une autre option.", "info");
+    return;
+  }
+  if (choixLm === "editeur" && !documents.lm.trim()) {
+    afficherMsg("Ta lettre est vide dans l'editeur. Choisis une autre option.", "info");
+    return;
+  }
+
+  const bouton = document.getElementById("btn-envoyer-masse");
+  bouton.disabled = true;
+  bouton.textContent = "Envoi en cours...";
+
+  const zone = document.getElementById("progression-masse");
+  zone.classList.remove("cache");
+
+  function dessinerProgression(fait, total, journal) {
+    const pourcent = Math.round((fait / total) * 100);
+    zone.innerHTML =
+      '<div class="barre-fond"><div class="barre-remplie" style="width:' + pourcent + '%"></div></div>' +
+      '<div style="font-size:13px;font-weight:600;margin-bottom:8px">' + fait + " / " + total + ' traitees</div>' +
+      '<div class="journal-masse">' + journal.join("") + '</div>';
+  }
+
+  const total = valides.length;
+  const journal = valides.map(function (l) {
+    return '<div class="journal-attente" id="jm-' + l.id + '">En attente : ' + l.entreprise + '</div>';
+  });
+  dessinerProgression(0, total, journal);
+
+  try {
+    // Les pieces sont identiques pour tout le lot : preparees une seule fois
+    const prep = await preparerPieces(choixCv, choixLm);
+
+    let reussis = 0;
+    let echecs = 0;
+
+    for (let i = 0; i < valides.length; i++) {
+      const cible = valides[i];
+      const idxJournal = journal.findIndex(function (t) { return t.indexOf('id="jm-' + cible.id + '"') !== -1; });
+
+      try {
+        await envoyerUne(cible, prep.pieces, prep.noms, choixCv, choixLm);
+        reussis++;
+        journal[idxJournal] = '<div class="journal-ok">Envoye : ' + cible.entreprise + '</div>';
+      } catch (err) {
+        echecs++;
+        journal[idxJournal] = '<div class="journal-ko">Echec : ' + cible.entreprise +
+          ' (' + String(err && err.message ? err.message : err) + ')</div>';
+      }
+
+      dessinerProgression(i + 1, total, journal);
+      rafraichir();
+
+      // Pause entre chaque envoi pour ne pas saturer Gmail
+      if (i < valides.length - 1) await pause(2500);
+    }
+
+    if (echecs === 0) {
+      afficherMsg(reussis + " candidature(s) envoyee(s) avec succes.", "ok");
+      lignesMasse = lignesMasse.filter(function (l) {
+        return !valides.some(function (v) { return v.id === l.id; });
+      });
+      if (lignesMasse.length === 0) ajouterLigneMasse();
+      dessinerLignesMasse();
+    } else {
+      afficherMsg(reussis + " envoyee(s), " + echecs + " en echec. Voir le detail ci-dessous.",
+                  reussis > 0 ? "info" : "ko");
+    }
+  } catch (err) {
+    afficherMsg("Erreur lors de la preparation des documents.", "ko");
+    afficherDebug(String(err && err.message ? err.message : err));
+  } finally {
+    bouton.disabled = false;
+    bouton.textContent = "Envoyer toutes les candidatures";
+  }
+}
+
+function basculerMode(mode) {
+  const perso = mode === "perso";
+  document.getElementById("mode-perso").classList.toggle("cache", !perso);
+  document.getElementById("mode-masse").classList.toggle("cache", perso);
+  document.getElementById("btn-envoyer").classList.toggle("cache", !perso);
+  document.getElementById("btn-envoyer-masse").classList.toggle("cache", perso);
+  document.querySelectorAll("[data-mode]").forEach(function (b) {
+    b.classList.toggle("actif", b.dataset.mode === mode);
+  });
+  if (!perso && lignesMasse.length === 0) ajouterLigneMasse();
 }
 
 // =======================================================
@@ -1519,6 +1773,11 @@ document.getElementById("btn-reglages").addEventListener("click", enregistrerCon
 document.getElementById("btn-ouvrir-reglages").addEventListener("click", deplierReglages);
 document.getElementById("btn-modele").addEventListener("click", insererModele);
 document.getElementById("btn-envoyer").addEventListener("click", envoyer);
+document.getElementById("btn-envoyer-masse").addEventListener("click", envoyerMasse);
+document.getElementById("btn-ajouter-ligne").addEventListener("click", function () { ajouterLigneMasse(); });
+document.querySelectorAll("[data-mode]").forEach(function (b) {
+  b.addEventListener("click", function () { basculerMode(this.dataset.mode); });
+});
 document.getElementById("editeur").addEventListener("input", function () {
   majApercu();
   sauvegardeAuto();
