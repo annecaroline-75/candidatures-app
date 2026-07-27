@@ -263,6 +263,8 @@
   .aboutie { background: #e0f2fe; color: #075985; }
   .positive { background: #dcfce7; color: #166534; }
   .negative { background: #fee2e2; color: #991b1b; }
+  .manuelle { background: #e0e7ff; color: #3730a3; }
+  .sans-relance { background: #fef3c7; color: #78350f; }
   .select-statut {
     padding: 7px 10px; font-size: 13px; font-weight: 500;
     border: 1px solid #cbd5e1; border-radius: 8px;
@@ -414,13 +416,17 @@
         </div>
         <div>
           <label for="contrat">Type de contrat</label>
-          <select id="contrat">
+          <select id="contrat" onchange="majDureeVisible()">
             <option>CDI temps plein</option>
             <option>CDI temps partiel</option>
             <option>CDD temps plein</option>
             <option>CDD temps partiel</option>
             <option>Stage</option>
           </select>
+        </div>
+        <div id="bloc-duree" class="cache">
+          <label for="duree">Duree du contrat</label>
+          <input type="text" id="duree" placeholder="Ex : 6 mois, 1 an">
         </div>
         <div>
           <label for="email">Email du destinataire</label>
@@ -464,6 +470,54 @@
 
   <div class="carte">
     <h2>Mes candidatures</h2>
+
+    <button class="secondaire" id="btn-ouvrir-manuelle" style="margin-bottom:14px">
+      + Ajouter une candidature faite ailleurs
+    </button>
+
+    <div id="form-manuelle" class="cache" style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px;margin-bottom:16px">
+      <p class="aide" style="margin-top:0">
+        Pour une candidature envoyee hors de l'app (site de l'entreprise, formulaire en ligne...).
+        L'email est facultatif : renseigne-le si tu veux qu'elle soit relancee automatiquement,
+        sinon tu la relanceras a la main.
+      </p>
+      <div class="grille">
+        <div>
+          <label for="m-entreprise">Entreprise</label>
+          <input type="text" id="m-entreprise" placeholder="Mission Locale de...">
+        </div>
+        <div>
+          <label for="m-poste">Poste</label>
+          <input type="text" id="m-poste" placeholder="Conseillere en insertion">
+        </div>
+        <div>
+          <label for="m-contrat">Type de contrat</label>
+          <select id="m-contrat" onchange="majDureeManuelleVisible()">
+            <option>CDI temps plein</option>
+            <option>CDI temps partiel</option>
+            <option>CDD temps plein</option>
+            <option>CDD temps partiel</option>
+            <option>Stage</option>
+          </select>
+        </div>
+        <div id="bloc-duree-manuelle" class="cache">
+          <label for="m-duree">Duree du contrat</label>
+          <input type="text" id="m-duree" placeholder="Ex : 6 mois, 1 an">
+        </div>
+        <div>
+          <label for="m-date">Date d'envoi</label>
+          <input type="date" id="m-date">
+        </div>
+      </div>
+      <label for="m-email">Email (facultatif)</label>
+      <input type="email" id="m-email" placeholder="rh@entreprise.fr (laisse vide si inconnu)">
+
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button class="principal" id="btn-ajouter-manuelle" style="flex:1;margin-top:0">Enregistrer</button>
+        <button class="secondaire" id="btn-annuler-manuelle" style="flex:1;width:auto;margin-top:0">Annuler</button>
+      </div>
+    </div>
+
     <div id="liste"></div>
   </div>
 
@@ -1616,6 +1670,14 @@ function majListe() {
       ? '<div><span class="badge pj">' + c.pieces.join(" + ") + ' joints</span></div>'
       : '';
 
+    let badgeManuelle = "";
+    if (c.manuelle) {
+      const sansMail = (!c.email || !c.email.trim());
+      badgeManuelle = '<div><span class="badge manuelle">Ajoutee a la main</span>' +
+        (sansMail ? ' <span class="badge sans-relance">Relance manuelle</span>' : '') +
+        '</div>';
+    }
+
     const options = STATUTS.map(function (s) {
       return '<option' + (s === c.statut ? ' selected' : '') + '>' + s + '</option>';
     }).join("");
@@ -1651,11 +1713,14 @@ function majListe() {
       ? '<button class="b-bleu" onclick="preremplirEntretien(' + c.id + ')">Programmer l\'entretien</button>'
       : '';
 
+    const metaEmail = (c.email && c.email.trim()) ? (c.entreprise + ' — ' + c.email) : c.entreprise;
+
     return '<div class="ligne">' +
       '<div><span class="titre-ligne">' + c.poste + ' — ' + c.contrat + '</span>' +
       '<span class="badge ' + cls + '">' + c.statut + '</span></div>' +
-      '<div class="meta">' + c.entreprise + ' — ' + c.email + '</div>' +
+      '<div class="meta">' + metaEmail + '</div>' +
       pj +
+      badgeManuelle +
       '<div class="date">Envoyee le ' + c.dateEnvoi + infoRel + '</div>' +
       '<div class="actions">' +
         menuStatut +
@@ -1678,6 +1743,85 @@ function toggleApercu(id) {
 
 
 function rafraichir() { majStats(); majListe(); majTableauRelances(); }
+
+// Le champ duree n'a de sens que pour CDD et Stage
+function contratADuree(contrat) {
+  return contrat && (contrat.indexOf("CDD") === 0 || contrat === "Stage");
+}
+
+function majDureeVisible() {
+  const contrat = document.getElementById("contrat").value;
+  document.getElementById("bloc-duree").classList.toggle("cache", !contratADuree(contrat));
+}
+
+function majDureeManuelleVisible() {
+  const contrat = document.getElementById("m-contrat").value;
+  document.getElementById("bloc-duree-manuelle").classList.toggle("cache", !contratADuree(contrat));
+}
+
+// Assemble le libelle final : "CDD temps plein (6 mois)"
+function contratAvecDuree(contrat, duree) {
+  if (contratADuree(contrat) && duree && duree.trim()) {
+    return contrat + " (" + duree.trim() + ")";
+  }
+  return contrat;
+}
+
+function ouvrirFormManuelle() {
+  document.getElementById("form-manuelle").classList.remove("cache");
+  document.getElementById("btn-ouvrir-manuelle").classList.add("cache");
+  const auj = new Date().toISOString().slice(0, 10);
+  document.getElementById("m-date").value = auj;
+}
+
+function fermerFormManuelle() {
+  document.getElementById("form-manuelle").classList.add("cache");
+  document.getElementById("btn-ouvrir-manuelle").classList.remove("cache");
+  ["m-entreprise", "m-poste", "m-email", "m-duree"].forEach(function (id) {
+    document.getElementById(id).value = "";
+  });
+  document.getElementById("bloc-duree-manuelle").classList.add("cache");
+}
+
+function ajouterCandidatureManuelle() {
+  const entreprise = document.getElementById("m-entreprise").value.trim();
+  const poste = document.getElementById("m-poste").value.trim();
+  const contrat = contratAvecDuree(document.getElementById("m-contrat").value, document.getElementById("m-duree").value);
+  const dateIso = document.getElementById("m-date").value;
+  const email = document.getElementById("m-email").value.trim();
+
+  if (!entreprise || !poste || !dateIso) {
+    afficherMsg("Renseigne au moins l'entreprise, le poste et la date.", "info");
+    return;
+  }
+
+  const p = dateIso.split("-");
+  const dateFr = p[2] + "/" + p[1] + "/" + p[0];
+
+  candidatures.unshift({
+    id: Date.now() + Math.floor(Math.random() * 1000),
+    entreprise: entreprise,
+    poste: poste,
+    contrat: contrat,
+    email: email,
+    dateEnvoi: dateFr,
+    statut: "En attente",
+    relance: false,
+    nbRelances: 0,
+    dateDerniereRelance: null,
+    dateRelance: null,
+    pieces: [],
+    manuelle: true,
+    apercuOuvert: false,
+    snapshotMail: "",
+    snapshotCv: "",
+    snapshotLm: ""
+  });
+  ecrire("candidatures", candidatures);
+  rafraichir();
+  fermerFormManuelle();
+  afficherMsg("Candidature ajoutee au suivi.", "ok");
+}
 
 function changerStatut(id, nouveau) {
   candidatures = candidatures.map(c => c.id === id
@@ -1750,6 +1894,7 @@ function parseDateFr(texte) {
 function relanceDue(c) {
   if (!config.frequenceRelance || config.frequenceRelance === "aucune") return false;
   if (c.statut !== "En attente") return false;
+  if (!c.email || !c.email.trim()) return false; // sans email : relance manuelle seulement
 
   const jours = joursFrequence();
   if (!jours) return false;
@@ -2313,7 +2458,7 @@ async function envoyer() {
 
   const entreprise = document.getElementById("entreprise").value.trim();
   const poste      = document.getElementById("poste").value.trim();
-  const contrat    = document.getElementById("contrat").value;
+  const contrat    = contratAvecDuree(document.getElementById("contrat").value, document.getElementById("duree").value);
   const email      = document.getElementById("email").value.trim();
 
   if (!entreprise || !poste || !email) {
@@ -2384,7 +2529,10 @@ function retirerLigneMasse(id) {
 
 function majChampMasse(id, champ, valeur) {
   const ligne = lignesMasse.find(function (l) { return l.id === id; });
-  if (ligne) ligne[champ] = valeur;
+  if (!ligne) return;
+  ligne[champ] = valeur;
+  // Si le contrat change, on redessine pour afficher/masquer la duree
+  if (champ === "contrat") dessinerLignesMasse();
 }
 
 function dessinerLignesMasse() {
@@ -2396,6 +2544,12 @@ function dessinerLignesMasse() {
       return '<option' + (c === l.contrat ? ' selected' : '') + '>' + c + '</option>';
     }).join("");
 
+    const champDuree = contratADuree(l.contrat)
+      ? '<input type="text" placeholder="Duree (ex : 6 mois)" style="grid-column:1/-1" value="' +
+          (l.duree || "").replace(/"/g, "&quot;") +
+          '" oninput="majChampMasse(' + l.id + ',\'duree\',this.value)">'
+      : '';
+
     return '<div class="ligne-masse">' +
       '<input type="text" placeholder="Entreprise" value="' + (l.entreprise || "").replace(/"/g, "&quot;") +
         '" oninput="majChampMasse(' + l.id + ',\'entreprise\',this.value)">' +
@@ -2406,6 +2560,7 @@ function dessinerLignesMasse() {
       '<input type="email" placeholder="Email du destinataire" style="grid-column:1/-1" value="' +
         (l.email || "").replace(/"/g, "&quot;") +
         '" oninput="majChampMasse(' + l.id + ',\'email\',this.value)">' +
+      champDuree +
       '</div>';
   }).join("");
 }
@@ -2421,6 +2576,8 @@ async function envoyerMasse() {
 
   const valides = lignesMasse.filter(function (l) {
     return l.entreprise.trim() && l.poste.trim() && l.email.trim();
+  }).map(function (l) {
+    return Object.assign({}, l, { contrat: contratAvecDuree(l.contrat, l.duree) });
   });
 
   if (valides.length === 0) {
@@ -2529,6 +2686,9 @@ document.getElementById("btn-frequence").addEventListener("click", enregistrerFr
 document.getElementById("btn-texte-relance").addEventListener("click", enregistrerTexteRelance);
 document.getElementById("btn-nouvelle-note").addEventListener("click", nouvelleNote);
 document.getElementById("btn-ajouter-entretien").addEventListener("click", ajouterEntretien);
+document.getElementById("btn-ouvrir-manuelle").addEventListener("click", ouvrirFormManuelle);
+document.getElementById("btn-annuler-manuelle").addEventListener("click", fermerFormManuelle);
+document.getElementById("btn-ajouter-manuelle").addEventListener("click", ajouterCandidatureManuelle);
 document.getElementById("btn-texte-remerciement").addEventListener("click", enregistrerTexteRemerciement);
 document.getElementById("btn-fermer-note").addEventListener("click", fermerNote);
 document.getElementById("btn-supprimer-note").addEventListener("click", supprimerNoteActive);
@@ -2583,43 +2743,4 @@ document.querySelectorAll("[data-vue]").forEach(b => {
   });
 });
 
-document.querySelectorAll("[data-md]").forEach(b => {
-  b.addEventListener("click", function () { insererMarkdown(this.dataset.md); });
-});
-
-// =======================================================
-//  DEMARRAGE
-// =======================================================
-chargerConfig();
-chargerDocuments();
-chargerFichiersOrigine();
-chargerNotes();
-chargerEntretiens();
-majBoutonModele();
-majIndicateurPages();
-candidatures = lire("candidatures", []);
-// Migration des anciens statuts vers les nouveaux libelles
-(function migrerStatuts() {
-  const correspondance = {
-    "Entretien": "Demande entretien",
-    "Reponse entretien": "Reponse post-entretien positive",
-    "Reponse recue": "Demande entretien"
-  };
-  let modifie = false;
-  candidatures = candidatures.map(function (c) {
-    if (correspondance[c.statut]) {
-      modifie = true;
-      return Object.assign({}, c, { statut: correspondance[c.statut] });
-    }
-    return c;
-  });
-  if (modifie) ecrire("candidatures", candidatures);
-})();
-rafraichir();
-
-// Relances automatiques : on laisse l'interface s'afficher, puis on traite
-setTimeout(function () { traiterRelancesAuto(); }, 1200);
-
-</script>
-</body>
-</html>
+document
