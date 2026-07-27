@@ -173,6 +173,7 @@
   }
   .bascule button.actif { background: #2563eb; color: #fff; }
   .bascule button:disabled { opacity: .45; cursor: not-allowed; }
+  .invite-doc { font-size: 13px; color: #94a3b8; font-style: italic; padding: 4px 0; }
   .etat-sauvegarde {
     font-size: 12px; color: #16a34a; align-self: center;
     margin-left: auto; font-weight: 600;
@@ -703,28 +704,28 @@ function majOptionsEnvoi() {
     const aOriginal = !!fichiersOrigine[cle];
     const aTexte = !!(documents[cle] && documents[cle].trim());
 
-    // Bascule automatiquement si le choix actuel n'est plus disponible
-    if (choixEnvoi[cle] === "original" && !aOriginal) choixEnvoi[cle] = aTexte ? "editeur" : "original";
-    if (choixEnvoi[cle] === "editeur" && !aTexte) choixEnvoi[cle] = aOriginal ? "original" : "editeur";
-
-    const nomOriginal = aOriginal ? fichiersOrigine[cle].nom : "aucun fichier importe";
-
-    zone.innerHTML =
-      '<button class="' + (choixEnvoi[cle] === "original" ? "actif" : "") + '"' +
-        (aOriginal ? "" : " disabled") +
-        ' onclick="definirChoix(\'' + cle + '\',\'original\')">' +
-        'Version originale</button>' +
-      '<button class="' + (choixEnvoi[cle] === "editeur" ? "actif" : "") + '"' +
-        (aTexte ? "" : " disabled") +
-        ' onclick="definirChoix(\'' + cle + '\',\'editeur\')">' +
-        'Version modifiee ici</button>';
-
-    const info = document.getElementById("info-" + cle);
-    if (info) {
-      info.textContent = choixEnvoi[cle] === "original"
-        ? "Sera envoye : " + nomOriginal
-        : "Sera envoye : un PDF genere depuis l'editeur";
+    // Si aucun document n'existe encore, message d'invite au lieu de boutons grises
+    if (!aOriginal && !aTexte) {
+      const quoi = cle === "cv" ? "ton CV" : "ta lettre";
+      zone.innerHTML = '<span class="invite-doc">Importe ou ecris ' + quoi +
+        ' dans l\'onglet Documents pour pouvoir le joindre.</span>';
+      return;
     }
+
+    // Bascule automatiquement si le choix actuel n'est plus disponible
+    if (choixEnvoi[cle] === "original" && !aOriginal) choixEnvoi[cle] = "editeur";
+    if (choixEnvoi[cle] === "editeur" && !aTexte) choixEnvoi[cle] = "original";
+
+    let html = "";
+    if (aOriginal) {
+      html += '<button class="' + (choixEnvoi[cle] === "original" ? "actif" : "") + '"' +
+        ' onclick="definirChoix(\'' + cle + '\',\'original\')">Version originale</button>';
+    }
+    if (aTexte) {
+      html += '<button class="' + (choixEnvoi[cle] === "editeur" ? "actif" : "") + '"' +
+        ' onclick="definirChoix(\'' + cle + '\',\'editeur\')">Version modifiee ici</button>';
+    }
+    zone.innerHTML = html;
   });
 }
 
@@ -2738,9 +2739,4 @@ document.querySelectorAll("[data-vue]").forEach(b => {
       document.getElementById("vue-apercu").classList.remove("cache");
     } else {
       document.getElementById("vue-edition").classList.remove("cache");
-      document.getElementById("vue-apercu").classList.add("cache");
-    }
-  });
-});
-
-document 
+      document.getElementById("vue-apercu").cl
