@@ -450,10 +450,12 @@
     </div>
 
     <label style="margin-top:16px">Quel CV envoyer</label>
-    <div class="bascule" id="bascule-cv"></div>
+    <div class="bascule" id="bascule-cv"><span class="invite-doc">Chargement...</span></div>
 
     <label style="margin-top:14px">Quelle lettre envoyer</label>
-    <div class="bascule" id="bascule-lm"></div>
+    <div class="bascule" id="bascule-lm"><span class="invite-doc">Chargement...</span></div>
+
+    <div id="diag-envoi" style="font-size:11px;color:#94a3b8;margin-top:6px"></div>
 
     <button class="principal" id="btn-envoyer">Envoyer ma candidature</button>
     <button class="principal cache" id="btn-envoyer-masse">Envoyer toutes les candidatures</button>
@@ -2736,7 +2738,4 @@ document.querySelectorAll("[data-vue]").forEach(b => {
     if (vueActive === "apercu") {
       majApercu();
       document.getElementById("vue-edition").classList.add("cache");
-      document.getElementById("vue-apercu").classList.remove("cache");
-    } else {
-      document.getElementById("vue-edition").classList.remove("cache");
-      document.getElementById("vue-apercu").cl
+      document.getElementBy
