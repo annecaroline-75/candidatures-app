@@ -634,9 +634,23 @@
 </div>
 
 <script>
-// Les retours a la ligne simples sont respectes tels quels,
-// sans quoi les paragraphes d'une lettre se retrouvent colles.
-marked.setOptions({ breaks: true, gfm: true });
+// Capteur d'erreur global : affiche toute erreur JS a l'ecran
+window.onerror = function (message, source, ligne) {
+  try {
+    const d = document.getElementById("diag-envoi");
+    if (d) { d.style.color = "#dc2626"; d.textContent = "ERREUR JS (ligne " + ligne + ") : " + message; }
+    const bc = document.getElementById("bascule-cv");
+    if (bc) bc.innerHTML = '<span class="invite-doc">Voir erreur en bas du formulaire</span>';
+    const bl = document.getElementById("bascule-lm");
+    if (bl) bl.innerHTML = '<span class="invite-doc">Voir erreur en bas du formulaire</span>';
+  } catch (e) {}
+  return false;
+};
+
+// Configuration de marked, protegee au cas ou la librairie ne serait pas chargee
+if (typeof marked !== "undefined" && marked.setOptions) {
+  marked.setOptions({ breaks: true, gfm: true });
+}
 
 // =======================================================
 //  ETAT
@@ -889,6 +903,10 @@ function afficherDoc() {
 
 // Convertit ->texte<- en ligne centree, puis applique marked
 function rendreMarkdown(texte) {
+  // Repli si la librairie marked n'est pas chargee
+  if (typeof marked === "undefined" || !marked.parse) {
+    return (texte || "Rien a afficher pour le moment.").replace(/\n/g, "<br>");
+  }
   if (!texte) return marked.parse("*Rien a afficher pour le moment.*");
   const lignes = texte.split("\n").map(function (ligne) {
     const m = ligne.match(/^\s*->(.+?)<-\s*$/);
@@ -2716,26 +2734,4 @@ document.getElementById("editeur").addEventListener("input", function () {
 document.getElementById("import-original").addEventListener("change", traiterImportOriginal);
 document.getElementById("import-editeur").addEventListener("change", traiterImportEditeur);
 
-document.querySelectorAll("[data-doc]").forEach(b => {
-  b.addEventListener("click", function () {
-    documents[docActif] = document.getElementById("editeur").value;
-    ecrire("documents", documents);
-    docActif = this.dataset.doc;
-    document.querySelectorAll("[data-doc]").forEach(x => x.classList.remove("actif"));
-    this.classList.add("actif");
-    afficherDoc();
-    majAffichageFichiers();
-    majBoutonModele();
-    majIndicateurPages();
-  });
-});
-
-document.querySelectorAll("[data-vue]").forEach(b => {
-  b.addEventListener("click", function () {
-    vueActive = this.dataset.vue;
-    document.querySelectorAll("[data-vue]").forEach(x => x.classList.remove("actif"));
-    this.classList.add("actif");
-    if (vueActive === "apercu") {
-      majApercu();
-      document.getElementById("vue-edition").classList.add("cache");
-      document.getElementBy
+document.querySelectorAll("[data-doc
